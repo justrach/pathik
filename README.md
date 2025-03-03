@@ -162,7 +162,7 @@ Configure R2 credentials in `storage.go` or through environment variables.
 ---
 
 ## 📜 **License**
-**MIT License**
+**Apache 2 License**
 
 🌟 **Pathik - Navigate the web with precision and speed!** 🌟
 
