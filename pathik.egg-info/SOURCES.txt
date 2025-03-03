@@ -1,0 +1,11 @@
+README.md
+setup.py
+pathik/__init__.py
+pathik/crawler.py
+pathik/pathik_bin
+pathik/simple.py
+pathik.egg-info/PKG-INFO
+pathik.egg-info/SOURCES.txt
+pathik.egg-info/dependency_links.txt
+pathik.egg-info/top_level.txt
+pathik/bin/pathik_crawler
