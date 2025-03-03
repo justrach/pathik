@@ -140,4 +140,4 @@ Configure R2 credentials in `storage.go` or through environment variables.
 
 ## LICENSE
 
-MIT License
+Apache 2 License
