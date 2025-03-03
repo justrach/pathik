@@ -23,8 +23,8 @@ Pathik outperforms Playwright when crawling large websites:
 - **Optimized resource handling** to reduce overhead
 
 These improvements stem from Pathik's **Go-powered crawler core**, which avoids the memory-heavy footprint of full browser automation.
-
-![alt text](benchmarks/speed/comparison.png)
+![comparison](assets/PathikvPlaywright.png)
+<!-- ![alt text](benchmarks/speed/comparison.png) -->
 
 ---
 
