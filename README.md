@@ -122,6 +122,54 @@ for url, info in results.items():
 
 ---
 
+## **JavaScript Usage (Node.js / Bun)**
+
+Pathik can also be used in **JavaScript** or **TypeScript** environments, including **Node.js** and **Bun**.
+
+### **Installation**
+
+#### **Using Bun**:
+```bash
+bun i pathik
+# or global install
+bun -g pathik
+```
+
+#### **Using npm**:
+```bash
+npm install pathik
+```
+
+### **Basic Crawling**
+Below is an example of how you can use Pathik in JavaScript to crawl a URL. For more details, see [basic.js](pathik-js/examples/basic.js) in this repository.
+
+```js
+import { crawl } from 'pathik';
+
+(async () => {
+  const outputDir = './output';
+  const urls = [ 'https://example.com' ];
+
+  // Crawl the given URLs and store results locally
+  const results = await crawl(urls, outputDir);
+
+  for (const [url, files] of Object.entries(results)) {
+    console.log(`URL: ${url}`);
+    console.log(`HTML: ${files.html}`);
+    console.log(`Markdown: ${files.markdown}`);
+  }
+})();
+```
+
+### **CLI Usage** (Bun / Node)
+After installing globally (via **bun -g pathik** or **npm i -g pathik**), you can crawl URLs with one command:
+
+```bash
+pathik crawl https://example.com -o ./output
+```
+
+---
+
 ## 🛠️ **Troubleshooting**
 
 ### **Missing Binary**
