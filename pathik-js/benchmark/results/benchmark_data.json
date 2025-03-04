@@ -1,0 +1,84 @@
+{
+  "system": {
+    "platform": "darwin",
+    "release": "24.1.0",
+    "node": "v22.6.0",
+    "cpus": 14,
+    "memory": 48,
+    "date": "2025-03-04T15:32:03.711Z"
+  },
+  "singleResults": [
+    {
+      "crawler": "pathik",
+      "url": "https://example.com",
+      "time": 4.722,
+      "memory": 0.453125,
+      "contentSize": 0.2080078125,
+      "success": true
+    },
+    {
+      "crawler": "playwright",
+      "url": "https://example.com",
+      "time": 1.889,
+      "memory": 4.640625,
+      "contentSize": 0.287109375,
+      "success": true
+    },
+    {
+      "crawler": "pathik",
+      "url": "https://httpbin.org/html",
+      "time": 5.68,
+      "memory": 0.5,
+      "contentSize": 3.515625,
+      "success": true
+    },
+    {
+      "crawler": "playwright",
+      "url": "https://httpbin.org/html",
+      "time": 2.198,
+      "memory": 1.453125,
+      "contentSize": 3.5908203125,
+      "success": true
+    },
+    {
+      "crawler": "pathik",
+      "url": "https://jsonplaceholder.typicode.com",
+      "time": 4.415,
+      "memory": 0.421875,
+      "contentSize": 2.6396484375,
+      "success": true
+    },
+    {
+      "crawler": "playwright",
+      "url": "https://jsonplaceholder.typicode.com",
+      "time": 2.275,
+      "memory": 1.875,
+      "contentSize": 1.88671875,
+      "success": true
+    }
+  ],
+  "batchResults": [
+    {
+      "crawler": "pathik",
+      "totalTime": 30.001,
+      "avgTimePerUrl": 6.0002,
+      "memory": 1,
+      "memoryPerUrl": 0.2,
+      "successRate": 80,
+      "throughput": 0.1333288890370321,
+      "urlCount": 5,
+      "successCount": 4
+    },
+    {
+      "crawler": "playwright",
+      "totalTime": 5.257,
+      "avgTimePerUrl": 1.0514,
+      "memory": 4.984375,
+      "memoryPerUrl": 0.996875,
+      "successRate": 100,
+      "throughput": 0.9511128019783147,
+      "urlCount": 5,
+      "successCount": 5
+    }
+  ]
+}
