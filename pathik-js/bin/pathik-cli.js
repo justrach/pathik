@@ -1,0 +1,85 @@
+#!/usr/bin/env node
+/**
+ * Command-line interface for Pathik
+ */
+
+const { program } = require('commander');
+const path = require('path');
+const fs = require('fs');
+const pathik = require('../src/index');
+
+program
+  .name('pathik')
+  .description('High-performance web crawler implemented in Go')
+  .version('0.1.0');
+
+program
+  .command('crawl')
+  .description('Crawl URLs and save content locally')
+  .argument('<urls...>', 'URLs to crawl')
+  .option('-o, --output <dir>', 'Output directory', './output')
+  .action(async (urls, options) => {
+    try {
+      console.log(`Crawling ${urls.length} URLs to ${options.output}...`);
+      
+      // Ensure output directory exists
+      fs.mkdirSync(options.output, { recursive: true });
+      
+      // Crawl URLs
+      const results = await pathik.crawl(urls, { 
+        outputDir: options.output 
+      });
+      
+      // Print results
+      console.log('\nCrawling results:');
+      for (const [url, files] of Object.entries(results)) {
+        console.log(`\nURL: ${url}`);
+        console.log(`HTML file: ${files.html}`);
+        console.log(`Markdown file: ${files.markdown}`);
+        
+        // Print sample markdown content
+        if (files.markdown && fs.existsSync(files.markdown)) {
+          const content = fs.readFileSync(files.markdown, 'utf-8').slice(0, 500);
+          console.log('\nSample markdown content:');
+          console.log(`${content}...`);
+        } else {
+          console.log('WARNING: Markdown file not found or empty!');
+        }
+      }
+    } catch (error) {
+      console.error(`Error: ${error.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('r2')
+  .description('Crawl URLs and upload content to R2')
+  .argument('<urls...>', 'URLs to crawl')
+  .option('-u, --uuid <uuid>', 'UUID for R2 upload')
+  .action(async (urls, options) => {
+    try {
+      console.log(`Crawling and uploading ${urls.length} URLs to R2...`);
+      
+      // Crawl and upload
+      const results = await pathik.crawlToR2(urls, {
+        uuid: options.uuid
+      });
+      
+      // Print results
+      console.log('\nR2 Upload results:');
+      for (const [url, info] of Object.entries(results)) {
+        console.log(`\nURL: ${url}`);
+        console.log(`UUID: ${info.uuid}`);
+        console.log(`R2 HTML key: ${info.r2_html_key}`);
+        console.log(`R2 Markdown key: ${info.r2_markdown_key}`);
+        console.log(`Local HTML file: ${info.local_html_file}`);
+        console.log(`Local Markdown file: ${info.local_markdown_file}`);
+      }
+    } catch (error) {
+      console.error(`Error: ${error.message}`);
+      process.exit(1);
+    }
+  });
+
+program.parse(); 

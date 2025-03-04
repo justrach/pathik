@@ -1,0 +1,43 @@
+{
+  "name": "pathik",
+  "version": "0.1.0",
+  "description": "High-performance web crawler implemented in Go with JavaScript bindings",
+  "main": "src/index.js",
+  "types": "types/index.d.ts",
+  "bin": {
+    "pathik": "./bin/pathik-cli.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js",
+    "test": "node examples/basic.js",
+    "build-binary": "node scripts/build.js"
+  },
+  "keywords": [
+    "crawler",
+    "web-scraping",
+    "go",
+    "high-performance",
+    "markdown"
+  ],
+  "author": "Rach Pradhan",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "commander": "^11.1.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "chai": "^4.3.10",
+    "mocha": "^10.2.0",
+    "@types/node": "^18.0.0"
+  },
+  "files": [
+    "src",
+    "bin",
+    "scripts",
+    "types",
+    "README.md"
+  ]
+} 
