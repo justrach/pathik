@@ -1,6 +1,6 @@
 {
   "name": "pathik",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "High-performance web crawler implemented in Go with JavaScript bindings",
   "main": "src/index.js",
   "types": "types/index.d.ts",

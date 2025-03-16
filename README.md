@@ -1,168 +1,174 @@
-<p align="center">
-  <img src="/assets/pathik_logo.png" alt="Pathik Logo" width="1600"/>
-</p>
+# Pathik
 
-<h1 align="center"><b>Pathik (पथिक)</b></h1>
+A high-performance web crawler implemented in Go with Python and JavaScript bindings.
 
-# 🛤️ **Pathik - High-Performance Web Crawler** ⚡
+## Features
 
-## **Introduction**
-Pathik (पथिक) is the Sanskrit word for **traveler** or **one who follows a path**. Just as a traveler navigates vast terrains efficiently, **Pathik is a blazing-fast web crawler that maps the digital world with speed and precision.** 🚀
+- Fast crawling with Go's concurrency model
+- Clean content extraction
+- Markdown conversion
+- Parallel URL processing
+- Cloudflare R2 integration
+- Memory-efficient (uses ~10x less memory than browser automation tools)
 
-A powerful, memory-efficient web crawling tool with **Go implementation and Python bindings**, designed for high-performance web scraping. Pathik supports **local storage** and optional **Cloudflare R2 storage** for seamless scalability.
+## Python Installation
 
-## **⚡ Performance Benefits**
-
-### **Memory Efficiency**
-Unlike browser-based scraping tools like Playwright, Pathik operates with minimal memory overhead, making it ideal for large-scale crawling or resource-constrained environments.
-
-### **Speed Advantages**
-Pathik outperforms Playwright when crawling large websites:
-- **Faster page processing and navigation**
-- **Efficient parallel crawling** for maximum throughput
-- **Optimized resource handling** to reduce overhead
-
-These improvements stem from Pathik's **Go-powered crawler core**, which avoids the memory-heavy footprint of full browser automation.
-![comparison](assets/PathikvPlaywright.png)
-<!-- ![alt text](benchmarks/speed/comparison.png) -->
-
----
-
-## 🚀 **Installation**
-
-### **Prerequisites**
-- Go 1.16+
-- Python 3.6+
-
-### **Install Python Package**
-```sh
+```bash
 pip install pathik
 ```
 
-### **Clone Repository**
-```sh
-git clone https://github.com/yourusername/pathik.git
-cd pathik
+## JavaScript Installation
+
+```bash
+npm install pathik
 ```
 
-### **Install in Development Mode**
-```sh
-pip install -e .
-```
+## Python Usage
 
----
-
-## 🔧 **Building the Go Binary**
-
-### **Navigate to Pathik Directory**
-```sh
-cd pathik
-```
-
-### **Build Binary Using Script**
-```sh
-python build_binary.py
-```
-
-### **Expected Output:**
-```
-Building Go binary in /path/to/pathik
-Build successful!
-Binary located at: /path/to/pathik/pathik_bin
-Testing binary...
-Binary output: [Help text from binary]
-```
-
----
-
-## 🔍 **Usage**
-
-### **Python Usage**
-
-#### **Basic Crawling**
 ```python
 import pathik
 import os
 
+# Create an output directory with an absolute path
 output_dir = os.path.abspath("output_data")
 os.makedirs(output_dir, exist_ok=True)
 
-urls = ["https://example.com"]
-results = pathik.crawl(urls, output_dir)
+# Crawl a single URL
+result = pathik.crawl('https://example.com', output_dir=output_dir)
+print(f"HTML file: {result['https://example.com']['html']}")
+print(f"Markdown file: {result['https://example.com']['markdown']}")
 
-for url, files in results.items():
-    print(f"URL: {url}")
-    print(f"HTML: {files['html']}")
-    print(f"Markdown: {files['markdown']}")
+# Crawl multiple URLs in parallel (default behavior)
+urls = [
+    "https://example.com",
+    "https://news.ycombinator.com",
+    "https://github.com",
+    "https://wikipedia.org"
+]
+results = pathik.crawl(urls, output_dir=output_dir)
+
+# Crawl URLs sequentially (parallel disabled)
+results = pathik.crawl(urls, output_dir=output_dir, parallel=False)
+
+# Crawl and upload to R2
+r2_results = pathik.crawl_to_r2(urls, uuid_str='my-unique-id', parallel=True)
 ```
 
-#### **R2 Upload (Optional)**
-```python
-results = pathik.crawl_to_r2(
-    ["https://example.com"],
-    uuid_str="my-id"
-)
+## JavaScript Usage
 
-for url, info in results.items():
-    print(f"R2 HTML Key: {info['r2_html_key']}")
-    print(f"Local File: {info['local_html_file']}")
+```javascript
+const pathik = require('pathik');
+const path = require('path');
+const fs = require('fs');
+
+// Create output directory
+const outputDir = path.resolve('./output_data');
+fs.mkdirSync(outputDir, { recursive: true });
+
+// Crawl a single URL
+pathik.crawl('https://example.com', { outputDir })
+  .then(results => {
+    console.log(`HTML file: ${results['https://example.com'].html}`);
+  });
+
+// Crawl multiple URLs in parallel (default behavior)
+const urls = [
+  'https://example.com',
+  'https://news.ycombinator.com',
+  'https://github.com'
+];
+
+pathik.crawl(urls, { outputDir })
+  .then(results => {
+    console.log(`Crawled ${Object.keys(results).length} URLs`);
+  });
+
+// Crawl URLs sequentially
+pathik.crawl(urls, { outputDir, parallel: false })
+  .then(results => {
+    console.log(`Crawled ${Object.keys(results).length} URLs sequentially`);
+  });
+
+// Upload to R2
+pathik.crawlToR2(urls, { uuid: 'my-unique-id' })
+  .then(results => {
+    console.log('R2 Upload complete');
+  });
 ```
 
-### **Direct Go Usage**
+## Python API
 
-#### **Local Crawling**
-```sh
-./pathik_bin -crawl -outdir ./output https://example.com
-```
+### pathik.crawl(urls, output_dir=None, parallel=True)
 
-#### **R2 Upload**
-```sh
-./pathik_bin -r2 -uuid my-id -dir ./output https://example.com
-```
+Crawl URLs and save the content locally.
 
----
+**Parameters:**
+- `urls`: A single URL string or a list of URLs to crawl
+- `output_dir`: Directory to save crawled files (uses a temporary directory if None)
+- `parallel`: Whether to use parallel crawling (default: True)
 
-## 🛠️ **Troubleshooting**
+**Returns:**
+- A dictionary mapping URLs to file paths: `{url: {"html": html_path, "markdown": markdown_path}}`
 
-### **Missing Binary**
-```sh
-cd pathik
+### pathik.crawl_to_r2(urls, uuid_str=None, parallel=True)
+
+Crawl URLs and upload the content to Cloudflare R2.
+
+**Parameters:**
+- `urls`: A single URL string or a list of URLs to crawl
+- `uuid_str`: UUID to prefix filenames for uploads (generates one if None)
+- `parallel`: Whether to use parallel crawling (default: True)
+
+**Returns:**
+- A dictionary with R2 upload information
+
+## JavaScript API
+
+### pathik.crawl(urls, options)
+
+Crawl URLs and save content locally.
+
+**Parameters:**
+- `urls`: String or array of URLs to crawl
+- `options`: Object with crawl options
+  - `outputDir`: Directory to save output (uses temp dir if null)
+  - `parallel`: Enable/disable parallel crawling (default: true)
+
+**Returns:**
+- Promise resolving to an object mapping URLs to file paths
+
+### pathik.crawlToR2(urls, options)
+
+Crawl URLs and upload content to R2.
+
+**Parameters:**
+- `urls`: String or array of URLs to crawl
+- `options`: Object with R2 options
+  - `uuid`: UUID to prefix filenames (generates random UUID if null)
+  - `parallel`: Enable/disable parallel crawling (default: true)
+
+**Returns:**
+- Promise resolving to an object mapping URLs to R2 keys
+
+## Requirements
+
+- Go 1.18+ (for building the binary)
+- Python 3.6+ or Node.js 14+
+
+## Building from Source
+
+For Python:
+```bash
 python build_binary.py
+pip install -e .
 ```
 
-### **Path Issues**
-```python
-# Use absolute paths
-output_dir = os.path.abspath("./output")
+For JavaScript:
+```bash
+npm run build-binary
+npm install
 ```
 
-### **Import Errors**
-```sh
-pip uninstall -y pathik
-cd pathik && pip install -e .
-```
+## License
 
----
-
-## 🏗️ **Project Structure**
-- `main.go` - CLI interface
-- `crawler/` - Web crawling logic
-- `storage/` - File storage handlers
-- `pathik/` - Python bindings
-- `__init__.py` - Package setup
-- `crawler.py` - Go integration
-- `simple.py` - Python fallback
-
----
-
-## ⚙️ **Configuration**
-
-Configure R2 credentials in `storage.go` or through environment variables.
-
----
-
-## 📜 **License**
-**Apache 2 License**
-
-🌟 **Pathik - Navigate the web with precision and speed!** 🌟
-
+Apache 2.0 

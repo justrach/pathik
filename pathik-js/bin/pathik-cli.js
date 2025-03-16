@@ -18,6 +18,8 @@ program
   .description('Crawl URLs and save content locally')
   .argument('<urls...>', 'URLs to crawl')
   .option('-o, --output <dir>', 'Output directory', './output')
+  .option('-p, --parallel', 'Use parallel crawling (default: true)')
+  .option('--no-parallel', 'Disable parallel crawling')
   .action(async (urls, options) => {
     try {
       console.log(`Crawling ${urls.length} URLs to ${options.output}...`);
@@ -27,15 +29,22 @@ program
       
       // Crawl URLs
       const results = await pathik.crawl(urls, { 
-        outputDir: options.output 
+        outputDir: options.output,
+        parallel: options.parallel !== false
       });
       
       // Print results
       console.log('\nCrawling results:');
       for (const [url, files] of Object.entries(results)) {
         console.log(`\nURL: ${url}`);
-        console.log(`HTML file: ${files.html}`);
-        console.log(`Markdown file: ${files.markdown}`);
+        
+        if (files.error) {
+          console.log(`Error: ${files.error}`);
+          continue;
+        }
+        
+        console.log(`HTML file: ${files.html || 'Not found'}`);
+        console.log(`Markdown file: ${files.markdown || 'Not found'}`);
         
         // Print sample markdown content
         if (files.markdown && fs.existsSync(files.markdown)) {
@@ -57,24 +66,33 @@ program
   .description('Crawl URLs and upload content to R2')
   .argument('<urls...>', 'URLs to crawl')
   .option('-u, --uuid <uuid>', 'UUID for R2 upload')
+  .option('-p, --parallel', 'Use parallel crawling (default: true)')
+  .option('--no-parallel', 'Disable parallel crawling')
   .action(async (urls, options) => {
     try {
       console.log(`Crawling and uploading ${urls.length} URLs to R2...`);
       
       // Crawl and upload
       const results = await pathik.crawlToR2(urls, {
-        uuid: options.uuid
+        uuid: options.uuid,
+        parallel: options.parallel !== false
       });
       
       // Print results
       console.log('\nR2 Upload results:');
       for (const [url, info] of Object.entries(results)) {
         console.log(`\nURL: ${url}`);
+        
+        if (info.error) {
+          console.log(`Error: ${info.error}`);
+          continue;
+        }
+        
         console.log(`UUID: ${info.uuid}`);
         console.log(`R2 HTML key: ${info.r2_html_key}`);
         console.log(`R2 Markdown key: ${info.r2_markdown_key}`);
-        console.log(`Local HTML file: ${info.local_html_file}`);
-        console.log(`Local Markdown file: ${info.local_markdown_file}`);
+        console.log(`Local HTML file: ${info.local_html_file || 'Not found'}`);
+        console.log(`Local Markdown file: ${info.local_markdown_file || 'Not found'}`);
       }
     } catch (error) {
       console.error(`Error: ${error.message}`);

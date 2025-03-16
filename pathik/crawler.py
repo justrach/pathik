@@ -84,19 +84,20 @@ def _run_go_command(command: List[str]) -> Tuple[str, str]:
         raise CrawlerError(f"Failed to run command: {e}")
 
 
-def crawl(urls: List[str], output_dir: Optional[str] = None) -> Dict[str, Dict[str, str]]:
+def crawl(urls: List[str], output_dir: Optional[str] = None, parallel: bool = True) -> Dict[str, Dict[str, str]]:
     """
     Crawl the specified URLs and return paths to the downloaded files.
     
     Args:
         urls: A list of URLs to crawl or a single URL string
         output_dir: Directory to save the crawled files (uses temp dir if None)
+        parallel: Whether to use parallel crawling (default: True)
     
     Returns:
         A dictionary mapping URLs to file paths: 
         {url: {"html": html_path, "markdown": markdown_path}}
     """
-    print(f"crawl() called with urls={urls}, output_dir={output_dir}")
+    print(f"crawl() called with urls={urls}, output_dir={output_dir}, parallel={parallel}")
     
     # Convert single URL to list
     if isinstance(urls, str):
@@ -121,22 +122,16 @@ def crawl(urls: List[str], output_dir: Optional[str] = None) -> Dict[str, Dict[s
     
     print(f"Using binary at: {binary_path}")
     
-    # Create the command (don't use a list for subprocess.Popen)
+    # Create the command
     result = {}
     
-    # Process each URL individually to avoid argument parsing issues
-    for url in urls:
-        command = [binary_path, "-crawl", "-outdir", output_dir, url]
-        
-        # Run the command from the directory containing the Go code
-        current_dir = os.getcwd()
-        print(f"Current directory before: {current_dir}")
+    # Process URLs based on parallel flag
+    if parallel and len(urls) > 1:
+        # Use parallel processing with -parallel flag
         try:
-            os.chdir(os.path.dirname(os.path.abspath(__file__)))
-            print(f"Changed to directory: {os.getcwd()}")
-            print(f"Running command: {' '.join(command)}")
+            command = [binary_path, "-crawl", "-parallel", "-outdir", output_dir] + urls
+            print(f"Running parallel command: {' '.join(command)}")
             
-            # Use subprocess.run instead of _run_go_command
             process = subprocess.run(
                 command,
                 stdout=subprocess.PIPE,
@@ -150,27 +145,65 @@ def crawl(urls: List[str], output_dir: Optional[str] = None) -> Dict[str, Dict[s
                 
             print(f"Command stdout: {process.stdout[:200]}...")
             
-            # Find files for this URL
-            html_file, md_file = _find_files_for_url(output_dir, url)
-            result[url] = {
-                "html": html_file,
-                "markdown": md_file
-            }
-            
-        finally:
-            os.chdir(current_dir)
-            print(f"Changed back to directory: {os.getcwd()}")
+            # Find files for each URL
+            for url in urls:
+                html_file, md_file = _find_files_for_url(output_dir, url)
+                result[url] = {
+                    "html": html_file,
+                    "markdown": md_file
+                }
+                
+                # Check for successful crawl
+                if not html_file or not md_file:
+                    print(f"Warning: Files not found for {url}")
+        except Exception as e:
+            print(f"Error during parallel crawling: {e}")
+            # Fall back to sequential processing on error
+            print("Falling back to sequential processing...")
+            parallel = False
+    
+    # Process URLs sequentially if not parallel or parallel failed
+    if not parallel or len(urls) == 1:
+        for url in urls:
+            try:
+                command = [binary_path, "-crawl", "-outdir", output_dir, url]
+                print(f"Running command: {' '.join(command)}")
+                
+                process = subprocess.run(
+                    command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                
+                if process.returncode != 0:
+                    print(f"Error: {process.stderr}")
+                    result[url] = {"error": process.stderr}
+                    continue
+                    
+                print(f"Command stdout: {process.stdout[:200]}...")
+                
+                # Find files for this URL
+                html_file, md_file = _find_files_for_url(output_dir, url)
+                result[url] = {
+                    "html": html_file,
+                    "markdown": md_file
+                }
+            except Exception as e:
+                print(f"Error processing {url}: {e}")
+                result[url] = {"error": str(e)}
     
     return result
 
 
-def crawl_to_r2(urls: List[str], uuid_str: Optional[str] = None) -> Dict[str, Dict[str, str]]:
+def crawl_to_r2(urls: List[str], uuid_str: Optional[str] = None, parallel: bool = True) -> Dict[str, Dict[str, str]]:
     """
     Crawl the specified URLs and upload the results to R2.
     
     Args:
         urls: A list of URLs to crawl or a single URL string
         uuid_str: UUID to prefix filenames (generates one if None)
+        parallel: Whether to use parallel crawling (default: True)
     
     Returns:
         A dictionary with upload information
@@ -190,8 +223,8 @@ def crawl_to_r2(urls: List[str], uuid_str: Optional[str] = None) -> Dict[str, Di
     temp_dir = tempfile.mkdtemp(prefix="pathik_")
     
     try:
-        # First crawl the URLs with local storage
-        crawl_result = crawl(urls, output_dir=temp_dir)
+        # First crawl the URLs with local storage using parallel flag
+        crawl_result = crawl(urls, output_dir=temp_dir, parallel=parallel)
         
         # Process results
         result = {}
@@ -225,8 +258,8 @@ def crawl_to_r2(urls: List[str], uuid_str: Optional[str] = None) -> Dict[str, Di
                     "uuid": uuid_str,
                     "r2_html_key": f"{uuid_str}+{_sanitize_url(url)}.html",
                     "r2_markdown_key": f"{uuid_str}+{_sanitize_url(url)}.md",
-                    "local_html_file": crawl_result[url]["html"],
-                    "local_markdown_file": crawl_result[url]["markdown"]
+                    "local_html_file": crawl_result[url].get("html"),
+                    "local_markdown_file": crawl_result[url].get("markdown")
                 }
             finally:
                 os.chdir(current_dir)

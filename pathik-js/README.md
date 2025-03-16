@@ -48,6 +48,38 @@ pathik.crawl(urls, { outputDir })
   });
 ```
 
+### Parallel Crawling
+
+Pathik supports parallel crawling by default, making it very efficient for batch processing:
+
+```javascript
+const pathik = require('pathik');
+
+// List of many URLs to crawl in parallel
+const urls = [
+  'https://example.com',
+  'https://news.ycombinator.com',
+  'https://github.com',
+  'https://developer.mozilla.org',
+  'https://wikipedia.org'
+];
+
+// Crawl multiple URLs in parallel (default behavior)
+pathik.crawl(urls, { outputDir: './output' })
+  .then(results => {
+    console.log(`Successfully crawled ${Object.keys(results).length} URLs`);
+  });
+
+// Disable parallel crawling if needed
+pathik.crawl(urls, { 
+  outputDir: './output',
+  parallel: false  // Process sequentially
+})
+  .then(results => {
+    console.log(`Successfully crawled ${Object.keys(results).length} URLs sequentially`);
+  });
+```
+
 ### R2 Upload
 
 ```javascript
@@ -78,6 +110,12 @@ npm install -g pathik
 # Crawl URLs
 pathik crawl https://example.com https://news.ycombinator.com -o ./output
 
+# Crawl multiple URLs in parallel (default)
+pathik crawl https://example.com https://news.ycombinator.com https://github.com -o ./output
+
+# Disable parallel crawling
+pathik crawl https://example.com https://news.ycombinator.com --no-parallel -o ./output
+
 # Crawl and upload to R2
 pathik r2 https://example.com -u my-unique-id
 ```
@@ -91,6 +129,7 @@ Crawl URLs and save content locally.
 - `urls`: String or array of URLs to crawl
 - `options`: Object with crawl options
   - `outputDir`: Directory to save output (uses temp dir if null)
+  - `parallel`: Boolean to enable/disable parallel crawling (default: true)
 - Returns: Promise resolving to an object mapping URLs to file paths
 
 ### pathik.crawlToR2(urls, options)
@@ -100,6 +139,7 @@ Crawl URLs and upload content to R2.
 - `urls`: String or array of URLs to crawl
 - `options`: Object with R2 options
   - `uuid`: UUID to prefix filenames (generates random UUID if null)
+  - `parallel`: Boolean to enable/disable parallel crawling (default: true)
 - Returns: Promise resolving to an object mapping URLs to R2 keys
 
 ## Building the Binary
@@ -124,6 +164,14 @@ npm run build-binary
 npm uninstall -y pathik
 cd pathik-js && npm install
 ```
+
+## Performance
+
+Pathik's concurrent crawling is powered by Go's goroutines, making it significantly more memory-efficient than browser automation tools:
+
+- Uses ~10x less memory than Playwright
+- Efficiently processes large batches of URLs
+- Parallelism controlled by the Go binary (default: 5 concurrent crawls)
 
 ## License
 

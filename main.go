@@ -12,6 +12,7 @@ import (
 func main() {
 	// Parse command-line arguments
 	crawlFlag := flag.Bool("crawl", false, "Crawl URLs without uploading")
+	parallelFlag := flag.Bool("parallel", true, "Use parallel crawling (default: true)")
 	uuidFlag := flag.String("uuid", "", "UUID to prefix filenames for uploads")
 	dirFlag := flag.String("dir", ".", "Directory containing files to upload")
 	useR2Flag := flag.Bool("r2", false, "Upload files to Cloudflare R2 (requires uuid)")
@@ -26,14 +27,21 @@ func main() {
 
 	// Just crawl URLs if -crawl flag is set
 	if *crawlFlag {
-		for _, url := range urls {
-			fmt.Printf("Crawling %s...\n", url)
-			err := crawler.CrawlURL(url, "", nil, nil, *outDirFlag)
-			if err != nil {
-				log.Printf("Error crawling %s: %v", url, err)
+		if *parallelFlag && len(urls) > 1 {
+			// Use parallel crawling
+			fmt.Printf("Crawling %d URLs in parallel...\n", len(urls))
+			crawler.CrawlURLs(urls, *outDirFlag)
+		} else {
+			// Use sequential crawling
+			for _, url := range urls {
+				fmt.Printf("Crawling %s...\n", url)
+				err := crawler.CrawlURL(url, "", nil, nil, *outDirFlag)
+				if err != nil {
+					log.Printf("Error crawling %s: %v", url, err)
+				}
 			}
+			fmt.Println("Crawling complete!")
 		}
-		fmt.Println("Crawling complete!")
 		return
 	}
 

@@ -4,7 +4,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { exec, execSync } = require('child_process');
+const { exec } = require('child_process');
 const os = require('os');
 const { v4: uuidv4 } = require('uuid');
 const { getBinaryPath } = require('./utils');
@@ -15,6 +15,7 @@ const { getBinaryPath } = require('./utils');
  * @param {string|string[]} urls - URL or array of URLs to crawl
  * @param {Object} options - Crawl options
  * @param {string} [options.outputDir=null] - Directory to save output (uses temp dir if null)
+ * @param {boolean} [options.parallel=true] - Whether to use parallel crawling
  * @returns {Promise<Object>} Result mapping URLs to file paths
  */
 async function crawl(urls, options = {}) {
@@ -23,6 +24,9 @@ async function crawl(urls, options = {}) {
   if (urlList.length === 0) {
     throw new Error('No URLs provided');
   }
+  
+  // Set default options
+  const parallel = options.parallel !== undefined ? options.parallel : true;
 
   // Setup output directory
   let outputDir = options.outputDir;
@@ -42,9 +46,63 @@ async function crawl(urls, options = {}) {
   const binaryPath = await getBinaryPath();
   console.log(`Using binary at: ${binaryPath}`);
 
-  // Process each URL
+  // Process URLs
   const results = {};
   
+  // Use parallel or sequential processing
+  if (parallel && urlList.length > 1) {
+    try {
+      console.log(`Crawling ${urlList.length} URLs in parallel...`);
+      
+      // Prepare command with all URLs
+      const command = `"${binaryPath}" -crawl -parallel -outdir "${outputDir}" ${urlList.map(url => `"${url}"`).join(' ')}`;
+      
+      // Execute command
+      const { error, stdout, stderr } = await execPromise(command);
+      
+      if (error) {
+        console.error(`Error during parallel crawling: ${stderr}`);
+        throw new Error(`Command failed: ${stderr}`);
+      }
+      
+      // Find files for each URL
+      for (const url of urlList) {
+        const { htmlFile, mdFile } = findFilesForUrl(outputDir, url);
+        
+        results[url] = {
+          html: htmlFile,
+          markdown: mdFile
+        };
+        
+        if (!htmlFile || !mdFile) {
+          console.warn(`Warning: Some files not found for ${url}`);
+        } else {
+          console.log(`Successfully crawled ${url}`);
+        }
+      }
+    } catch (err) {
+      console.error(`Failed in parallel crawling: ${err.message}`);
+      console.log('Falling back to sequential crawling...');
+      // Continue with sequential processing
+      await processSequentially(urlList, binaryPath, outputDir, results);
+    }
+  } else {
+    // Use sequential processing
+    await processSequentially(urlList, binaryPath, outputDir, results);
+  }
+
+  return results;
+}
+
+/**
+ * Process URLs sequentially
+ * 
+ * @param {string[]} urlList - List of URLs to process
+ * @param {string} binaryPath - Path to binary
+ * @param {string} outputDir - Output directory
+ * @param {Object} results - Results object to populate
+ */
+async function processSequentially(urlList, binaryPath, outputDir, results) {
   for (const url of urlList) {
     try {
       console.log(`Crawling ${url}...`);
@@ -57,7 +115,8 @@ async function crawl(urls, options = {}) {
       
       if (error) {
         console.error(`Error crawling ${url}: ${stderr}`);
-        throw new Error(`Command failed: ${stderr}`);
+        results[url] = { error: stderr };
+        continue;
       }
       
       // Find files for this URL
@@ -76,8 +135,6 @@ async function crawl(urls, options = {}) {
       };
     }
   }
-
-  return results;
 }
 
 /**
@@ -86,6 +143,7 @@ async function crawl(urls, options = {}) {
  * @param {string|string[]} urls - URL or array of URLs to crawl
  * @param {Object} options - R2 crawl options
  * @param {string} [options.uuid=null] - UUID to prefix filenames (generates if null)
+ * @param {boolean} [options.parallel=true] - Whether to use parallel crawling
  * @returns {Promise<Object>} Result mapping URLs to R2 keys
  */
 async function crawlToR2(urls, options = {}) {
@@ -95,6 +153,9 @@ async function crawlToR2(urls, options = {}) {
     throw new Error('No URLs provided');
   }
   
+  // Set default options
+  const parallel = options.parallel !== undefined ? options.parallel : true;
+  
   // Generate UUID if not provided
   const uuidStr = options.uuid || uuidv4();
   
@@ -102,8 +163,11 @@ async function crawlToR2(urls, options = {}) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pathik-'));
   
   try {
-    // First crawl URLs locally
-    const crawlResults = await crawl(urlList, { outputDir: tempDir });
+    // First crawl URLs locally with parallel option
+    const crawlResults = await crawl(urlList, { 
+      outputDir: tempDir,
+      parallel: parallel
+    });
     
     // Get binary path
     const binaryPath = await getBinaryPath();
@@ -131,8 +195,8 @@ async function crawlToR2(urls, options = {}) {
           uuid: uuidStr,
           r2_html_key: `${uuidStr}+${sanitizeUrl(url)}.html`,
           r2_markdown_key: `${uuidStr}+${sanitizeUrl(url)}.md`,
-          local_html_file: crawlResults[url].html,
-          local_markdown_file: crawlResults[url].markdown
+          local_html_file: crawlResults[url]?.html,
+          local_markdown_file: crawlResults[url]?.markdown
         };
         
         console.log(`Successfully uploaded ${url} to R2`);
