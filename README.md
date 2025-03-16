@@ -96,6 +96,30 @@ pathik.crawlToR2(urls, { uuid: 'my-unique-id' })
   });
 ```
 
+## Parallel Crawling Performance
+
+Parallel crawling significantly improves performance when processing multiple URLs. Our benchmarks show:
+
+### Python Performance
+
+```
+Testing with 5 URLs:
+- Parallel crawling completed in 7.78 seconds
+- Sequential crawling completed in 18.52 seconds
+- Performance improvement: 2.38x faster with parallel crawling
+```
+
+### JavaScript Performance
+
+```
+Testing with 5 URLs:
+- Parallel crawling completed in 6.96 seconds
+- Sequential crawling completed in 21.07 seconds
+- Performance improvement: 3.03x faster with parallel crawling
+```
+
+Parallel crawling is enabled by default when processing multiple URLs, but you can explicitly control it with the `parallel` parameter.
+
 ## Python API
 
 ### pathik.crawl(urls, output_dir=None, parallel=True)
