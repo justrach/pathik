@@ -15,6 +15,40 @@ A high-performance web crawler implemented in Go with Python and JavaScript bind
 - Cloudflare R2 integration
 - Memory-efficient (uses ~10x less memory than browser automation tools)
 
+## Performance Benchmarks
+
+### Memory Usage Comparison
+
+Pathik is significantly more memory-efficient than browser automation tools like Playwright:
+
+<p align="center">
+  <img src="assets/PathikvPlaywright.png" alt="Memory Usage Comparison">
+</p>
+
+### Parallel Crawling Performance
+
+Parallel crawling significantly improves performance when processing multiple URLs. Our benchmarks show:
+
+#### Python Performance
+
+```
+Testing with 5 URLs:
+- Parallel crawling completed in 7.78 seconds
+- Sequential crawling completed in 18.52 seconds
+- Performance improvement: 2.38x faster with parallel crawling
+```
+
+#### JavaScript Performance
+
+```
+Testing with 5 URLs:
+- Parallel crawling completed in 6.96 seconds
+- Sequential crawling completed in 21.07 seconds
+- Performance improvement: 3.03x faster with parallel crawling
+```
+
+Parallel crawling is enabled by default when processing multiple URLs, but you can explicitly control it with the `parallel` parameter.
+
 ## Python Installation
 
 ```bash
@@ -99,40 +133,6 @@ pathik.crawlToR2(urls, { uuid: 'my-unique-id' })
     console.log('R2 Upload complete');
   });
 ```
-
-## Performance Benchmarks
-
-### Memory Usage Comparison
-
-Pathik is significantly more memory-efficient than browser automation tools like Playwright:
-
-<p align="center">
-  <img src="assets/PathikvPlaywright.png" alt="Memory Usage Comparison">
-</p>
-
-### Parallel Crawling Performance
-
-Parallel crawling significantly improves performance when processing multiple URLs. Our benchmarks show:
-
-#### Python Performance
-
-```
-Testing with 5 URLs:
-- Parallel crawling completed in 7.78 seconds
-- Sequential crawling completed in 18.52 seconds
-- Performance improvement: 2.38x faster with parallel crawling
-```
-
-#### JavaScript Performance
-
-```
-Testing with 5 URLs:
-- Parallel crawling completed in 6.96 seconds
-- Sequential crawling completed in 21.07 seconds
-- Performance improvement: 3.03x faster with parallel crawling
-```
-
-Parallel crawling is enabled by default when processing multiple URLs, but you can explicitly control it with the `parallel` parameter.
 
 ## Python API
 
