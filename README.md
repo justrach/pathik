@@ -1,5 +1,9 @@
 # Pathik
 
+<p align="center">
+  <img src="assets/pathik_logo.png" alt="Pathik Logo" width="200" height="200">
+</p>
+
 A high-performance web crawler implemented in Go with Python and JavaScript bindings.
 
 ## Features
@@ -96,11 +100,21 @@ pathik.crawlToR2(urls, { uuid: 'my-unique-id' })
   });
 ```
 
-## Parallel Crawling Performance
+## Performance Benchmarks
+
+### Memory Usage Comparison
+
+Pathik is significantly more memory-efficient than browser automation tools like Playwright:
+
+<p align="center">
+  <img src="assets/PathikvPlaywright.png" alt="Memory Usage Comparison" width="800">
+</p>
+
+### Parallel Crawling Performance
 
 Parallel crawling significantly improves performance when processing multiple URLs. Our benchmarks show:
 
-### Python Performance
+#### Python Performance
 
 ```
 Testing with 5 URLs:
@@ -109,7 +123,7 @@ Testing with 5 URLs:
 - Performance improvement: 2.38x faster with parallel crawling
 ```
 
-### JavaScript Performance
+#### JavaScript Performance
 
 ```
 Testing with 5 URLs:
