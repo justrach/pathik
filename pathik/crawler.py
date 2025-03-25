@@ -22,32 +22,135 @@ def get_binary_path():
     # First, check if running from source or installed package
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
+    # Determine current platform with more reliable detection
+    # For Linux containers, platform.system() is reliable but platform.machine() might need verification
+    current_os = platform.system().lower()
+    if current_os.startswith("win"):
+        current_os = "windows"
+    elif current_os.startswith("linux"):
+        current_os = "linux"
+    elif current_os == "darwin":
+        current_os = "darwin"
+    
+    # Double-check for Linux in container environments
+    if os.path.exists("/proc/1/cgroup") or os.path.exists("/.dockerenv"):
+        # This is likely a container environment
+        with open("/proc/sys/kernel/osrelease", "r") as f:
+            osrelease = f.read().lower()
+            if "linux" in osrelease:
+                current_os = "linux"
+                print(f"Container environment detected, forcing OS to Linux")
+    
+    # Get architecture with additional verification
+    current_arch = platform.machine().lower()
+    if current_arch in ("x86_64", "amd64"):
+        current_arch = "amd64"
+    elif current_arch in ("arm64", "aarch64"):
+        current_arch = "arm64"
+    elif current_arch in ("i386", "i686", "x86"):
+        current_arch = "386"
+    
+    print(f"Detected platform: {current_os}_{current_arch}")
+    
     # Determine binary name based on platform
     binary_name = "pathik_bin"
-    if platform.system() == "Windows":
+    if current_os == "windows":
         binary_name += ".exe"
     
-    # Check if binary exists in the package directory
-    binary_path = os.path.join(current_dir, binary_name)
+    # Try different locations in order of preference:
+    # 1. Platform-specific binary in bin directory (most specific)
+    platform_binary_path = os.path.join(current_dir, "bin", f"{current_os}_{current_arch}", binary_name)
+    if os.path.exists(platform_binary_path) and os.access(platform_binary_path, os.X_OK):
+        print(f"Found platform-specific binary at {platform_binary_path}")
+        return platform_binary_path
     
-    if os.path.exists(binary_path):
-        return binary_path
+    # 2. Direct binary in package directory (built for current platform)
+    direct_binary_path = os.path.join(current_dir, binary_name)
+    if os.path.exists(direct_binary_path) and os.access(direct_binary_path, os.X_OK):
+        # Verify this is the correct binary format for the OS
+        try:
+            if current_os == "linux":
+                # Check for ELF header with file command
+                result = subprocess.run(["file", direct_binary_path], capture_output=True, text=True)
+                if "ELF" not in result.stdout:
+                    print(f"Warning: Binary at {direct_binary_path} is not an ELF file, skipping")
+                else:
+                    print(f"Found direct Linux binary at {direct_binary_path}")
+                    return direct_binary_path
+            elif current_os == "darwin":
+                # Check for Mach-O header with file command
+                result = subprocess.run(["file", direct_binary_path], capture_output=True, text=True)
+                if "Mach-O" not in result.stdout:
+                    print(f"Warning: Binary at {direct_binary_path} is not a Mach-O file, skipping")
+                else:
+                    print(f"Found direct macOS binary at {direct_binary_path}")
+                    return direct_binary_path
+            else:
+                # For Windows or other platforms, just trust the extension
+                print(f"Found direct binary at {direct_binary_path}")
+                return direct_binary_path
+        except Exception as e:
+            print(f"Warning: Error checking binary type: {e}, will try anyway")
+            return direct_binary_path
     
-    # If not found in package directory, it could be in site-packages
+    # 3. Check in site-packages
     if hasattr(sys, 'prefix'):
+        # First try platform-specific binary in site-packages
+        site_packages_platform_binary = os.path.join(sys.prefix, 'lib', 
+                                                f'python{sys.version_info.major}.{sys.version_info.minor}', 
+                                                'site-packages', 'pathik', 'bin', 
+                                                f"{current_os}_{current_arch}", binary_name)
+        if os.path.exists(site_packages_platform_binary) and os.access(site_packages_platform_binary, os.X_OK):
+            print(f"Found platform-specific binary in site-packages at {site_packages_platform_binary}")
+            return site_packages_platform_binary
+            
+        # Then try direct binary in site-packages
         site_packages_binary = os.path.join(sys.prefix, 'lib', 
-                                            f'python{sys.version_info.major}.{sys.version_info.minor}', 
-                                            'site-packages', 'pathik', binary_name)
-        if os.path.exists(site_packages_binary):
-            return site_packages_binary
+                                       f'python{sys.version_info.major}.{sys.version_info.minor}', 
+                                       'site-packages', 'pathik', binary_name)
+        if os.path.exists(site_packages_binary) and os.access(site_packages_binary, os.X_OK):
+            # Verify binary format
+            try:
+                if current_os == "linux":
+                    # Check for ELF header
+                    result = subprocess.run(["file", site_packages_binary], capture_output=True, text=True)
+                    if "ELF" not in result.stdout:
+                        print(f"Warning: Binary at {site_packages_binary} is not an ELF file, skipping")
+                    else:
+                        print(f"Found Linux binary in site-packages at {site_packages_binary}")
+                        return site_packages_binary
+                elif current_os == "darwin":
+                    # Check for Mach-O header
+                    result = subprocess.run(["file", site_packages_binary], capture_output=True, text=True)
+                    if "Mach-O" not in result.stdout:
+                        print(f"Warning: Binary at {site_packages_binary} is not a Mach-O file, skipping")
+                    else:
+                        print(f"Found macOS binary in site-packages at {site_packages_binary}")
+                        return site_packages_binary
+                else:
+                    # For Windows or other platforms
+                    print(f"Found binary in site-packages at {site_packages_binary}")
+                    return site_packages_binary
+            except Exception as e:
+                print(f"Warning: Error checking binary type: {e}, will try anyway")
+                return site_packages_binary
     
-    # As a fallback, check if it's in the same directory as the module
-    current_file_dir = os.path.dirname(os.path.abspath(__file__))
-    module_dir_binary = os.path.join(current_file_dir, binary_name)
-    if os.path.exists(module_dir_binary):
-        return module_dir_binary
+    # If we get here, no appropriate binary was found
+    error_msg = f"No binary found for {current_os}_{current_arch}."
     
-    raise FileNotFoundError(f"Pathik binary not found at {current_dir}")
+    # List all available binaries
+    available_binaries = []
+    bin_dir = os.path.join(current_dir, "bin")
+    if os.path.exists(bin_dir):
+        for root, dirs, files in os.walk(bin_dir):
+            for file in files:
+                if file.startswith("pathik_bin"):
+                    available_binaries.append(os.path.join(root, file))
+    
+    if available_binaries:
+        error_msg += f" Available binaries: {available_binaries}"
+    
+    raise FileNotFoundError(error_msg)
 
 
 def _run_go_command(command: List[str]) -> Tuple[str, str]:

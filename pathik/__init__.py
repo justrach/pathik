@@ -4,6 +4,9 @@ import os
 print(f"Loading pathik package from {__file__}")
 print(f"Python path: {sys.path}")
 
+# Set version
+__version__ = "0.2.2"
+
 # Import the crawler functions
 try:
     from pathik.crawler import crawl, crawl_to_r2
@@ -16,17 +19,17 @@ except ImportError as e:
     import uuid
     from typing import List, Dict, Optional
 
-    def crawl(urls: List[str], output_dir: Optional[str] = None) -> Dict[str, Dict[str, str]]:
+    def crawl(urls: List[str], output_dir: Optional[str] = None, parallel: bool = True) -> Dict[str, Dict[str, str]]:
         """Fallback implementation of crawl function"""
         print("Using fallback crawl implementation")
         # Basic implementation here
         # ...
 
-    def crawl_to_r2(urls: List[str], uuid_str: Optional[str] = None) -> Dict[str, Dict[str, str]]:
+    def crawl_to_r2(urls: List[str], uuid_str: Optional[str] = None, parallel: bool = True) -> Dict[str, Dict[str, str]]:
         """Fallback implementation of crawl_to_r2 function"""
         print("Using fallback crawl_to_r2 implementation")
         # Basic implementation here
         # ...
 
 # Export the functions
-__all__ = ["crawl", "crawl_to_r2"] 
+__all__ = ["crawl", "crawl_to_r2", "__version__"] 

@@ -1,0 +1,2 @@
+[console_scripts]
+pathik = pathik.cli:main
