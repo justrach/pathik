@@ -82,4 +82,85 @@ jobs:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
       run: |
-        twine upload dist/* 
+        twine upload dist/*
+
+  publish-npm:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        registry-url: 'https://registry.npmjs.org'
+    
+    - name: Install GitHub CLI
+      run: |
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+        sudo apt update
+        sudo apt install gh
+    
+    - name: Extract version from tag
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+    
+    - name: Create JS package binaries directory
+      run: mkdir -p pathik-js/bin
+    
+    - name: Download released binaries
+      run: |
+        # Create a temporary directory to download the binaries
+        mkdir -p temp_binaries
+        
+        # Download binaries from the GitHub release
+        gh release download v${{ env.VERSION }} --dir temp_binaries
+        
+        # List downloaded files
+        ls -la temp_binaries
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Copy binaries to JS package
+      run: |
+        # Create platform-specific directories
+        mkdir -p pathik-js/bin/darwin-amd64
+        mkdir -p pathik-js/bin/darwin-arm64
+        mkdir -p pathik-js/bin/linux-amd64
+        mkdir -p pathik-js/bin/linux-arm64
+        mkdir -p pathik-js/bin/win32-amd64
+        
+        # Copy binaries to the correct locations
+        cp temp_binaries/pathik_bin_darwin_amd64 pathik-js/bin/darwin-amd64/pathik_bin
+        cp temp_binaries/pathik_bin_darwin_arm64 pathik-js/bin/darwin-arm64/pathik_bin
+        cp temp_binaries/pathik_bin_linux_amd64 pathik-js/bin/linux-amd64/pathik_bin
+        cp temp_binaries/pathik_bin_linux_arm64 pathik-js/bin/linux-arm64/pathik_bin
+        cp temp_binaries/pathik_bin_windows_amd64.exe pathik-js/bin/win32-amd64/pathik_bin.exe
+        
+        # Make binaries executable
+        chmod +x pathik-js/bin/darwin-amd64/pathik_bin
+        chmod +x pathik-js/bin/darwin-arm64/pathik_bin
+        chmod +x pathik-js/bin/linux-amd64/pathik_bin
+        chmod +x pathik-js/bin/linux-arm64/pathik_bin
+        
+        # Verify the structure
+        find pathik-js/bin -type f | sort
+    
+    - name: Update package version
+      run: |
+        cd pathik-js
+        npm version ${{ env.VERSION }} --no-git-tag-version
+        cat package.json | grep version
+    
+    - name: Install dependencies
+      run: |
+        cd pathik-js
+        npm ci
+    
+    - name: Publish to npm
+      run: |
+        cd pathik-js
+        npm publish
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} 
