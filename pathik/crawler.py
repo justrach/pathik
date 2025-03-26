@@ -205,7 +205,6 @@ def get_binary_path():
         except Exception as e:
             print(f"Warning: Error checking binary type: {e}, will try anyway")
             return direct_binary_path
-    # 
     # 3. Check in site-packages
     if hasattr(sys, 'prefix'):
         # First try platform-specific binary in site-packages

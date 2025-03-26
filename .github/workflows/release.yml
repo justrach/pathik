@@ -33,10 +33,16 @@ jobs:
     - name: Build binaries for all platforms
       run: python build_binary.py --all
     
-    - name: Verify binaries
+    - name: Check output structure
       run: |
-        ls -la releases/
-        find releases -type f -name "pathik_bin*" | sort
+        find . -name "pathik_bin*" | sort
+    
+    - name: Debug pathik directory
+      run: |
+        echo "Contents of the bin directory:"
+        ls -la pathik/bin/ || echo "Directory not found"
+        echo "Searching for all binary files:"
+        find pathik -type f -name "pathik_bin*" || echo "No binaries found"
     
     - name: Create GitHub Release
       id: create_release
@@ -46,11 +52,11 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          releases/darwin_amd64/pathik_bin
-          releases/darwin_arm64/pathik_bin
-          releases/linux_amd64/pathik_bin
-          releases/linux_arm64/pathik_bin
-          releases/windows_amd64/pathik_bin.exe
+          pathik/bin/darwin_amd64/pathik_bin
+          pathik/bin/darwin_arm64/pathik_bin
+          pathik/bin/linux_amd64/pathik_bin
+          pathik/bin/linux_arm64/pathik_bin
+          pathik/bin/windows_amd64/pathik_bin.exe
     
     - name: Build Python package
       run: |
