@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     steps:
     - uses: actions/checkout@v3
     
@@ -51,6 +54,7 @@ jobs:
         name: Pathik ${{ env.VERSION }}
         draft: false
         prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}
         files: |
           pathik/bin/darwin_amd64/pathik_bin
           pathik/bin/darwin_arm64/pathik_bin
