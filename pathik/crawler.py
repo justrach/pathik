@@ -6,6 +6,11 @@ from typing import List, Dict, Tuple, Optional, Union
 import sys
 import json
 import platform
+import requests
+import hashlib
+import shutil
+from tqdm import tqdm
+import time
 
 # Add debugging output
 print("Loading pathik.crawler module")
@@ -15,6 +20,111 @@ print("Module path:", __file__)
 class CrawlerError(Exception):
     """Exception raised for errors in the crawler."""
     pass
+
+def download_binary(version=None):
+    """
+    Download the appropriate binary for the current platform from GitHub releases
+    
+    Args:
+        version: The version to download (if None, uses package version)
+    
+    Returns:
+        Path to the downloaded binary
+    """
+    from . import __version__
+    version = version or __version__
+    
+    # Determine current platform
+    current_os = platform.system().lower()
+    if current_os.startswith("win"):
+        current_os = "windows"
+    elif current_os.startswith("linux"):
+        current_os = "linux"
+    elif current_os == "darwin":
+        current_os = "darwin"
+    
+    # Double-check for Linux in container environments
+    if os.path.exists("/proc/1/cgroup") or os.path.exists("/.dockerenv"):
+        # This is likely a container environment
+        try:
+            with open("/proc/sys/kernel/osrelease", "r") as f:
+                osrelease = f.read().lower()
+                if "linux" in osrelease:
+                    current_os = "linux"
+                    print(f"Container environment detected, forcing OS to Linux")
+        except Exception as e:
+            print(f"Warning: Error checking container environment: {e}")
+    
+    # Get architecture
+    current_arch = platform.machine().lower()
+    if current_arch in ("x86_64", "amd64"):
+        current_arch = "amd64"
+    elif current_arch in ("arm64", "aarch64"):
+        current_arch = "arm64"
+    elif current_arch in ("i386", "i686", "x86"):
+        current_arch = "386"
+    
+    print(f"Downloading binary for platform: {current_os}_{current_arch}")
+    
+    # Determine binary name based on platform
+    binary_name = "pathik_bin"
+    if current_os == "windows":
+        binary_name += ".exe"
+    
+    # Create bin directory if it doesn't exist
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    bin_dir = os.path.join(current_dir, "bin", f"{current_os}_{current_arch}")
+    os.makedirs(bin_dir, exist_ok=True)
+    binary_path = os.path.join(bin_dir, binary_name)
+    
+    # If binary already exists, just return its path
+    if os.path.exists(binary_path) and os.access(binary_path, os.X_OK):
+        print(f"Binary already exists at {binary_path}")
+        return binary_path
+    
+    # GitHub release URL
+    github_release_url = f"https://github.com/justrach/pathik/releases/download/v{version}/{current_os}_{current_arch}/{binary_name}"
+    print(f"Downloading from: {github_release_url}")
+    
+    # Try downloading 3 times with backoff
+    max_retries = 3
+    for retry in range(max_retries):
+        try:
+            # Stream download with progress bar
+            with requests.get(github_release_url, stream=True) as r:
+                r.raise_for_status()
+                total_size = int(r.headers.get('content-length', 0))
+                
+                # Using tqdm for progress bar
+                with open(binary_path, 'wb') as f, tqdm(
+                    desc=f"Downloading pathik binary", 
+                    total=total_size,
+                    unit='B',
+                    unit_scale=True,
+                    unit_divisor=1024,
+                ) as bar:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                            bar.update(len(chunk))
+            
+            # Make binary executable
+            if current_os != "windows":
+                os.chmod(binary_path, 0o755)
+            
+            print(f"Successfully downloaded binary to {binary_path}")
+            return binary_path
+        
+        except Exception as e:
+            print(f"Error downloading binary (attempt {retry+1}/{max_retries}): {e}")
+            if retry < max_retries - 1:
+                wait_time = 2 ** retry  # Exponential backoff: 1, 2, 4 seconds
+                print(f"Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                raise RuntimeError(f"Failed to download binary after {max_retries} attempts") from e
+    
+    raise RuntimeError("Failed to download binary")
 
 
 def get_binary_path():
@@ -35,11 +145,14 @@ def get_binary_path():
     # Double-check for Linux in container environments
     if os.path.exists("/proc/1/cgroup") or os.path.exists("/.dockerenv"):
         # This is likely a container environment
-        with open("/proc/sys/kernel/osrelease", "r") as f:
-            osrelease = f.read().lower()
-            if "linux" in osrelease:
-                current_os = "linux"
-                print(f"Container environment detected, forcing OS to Linux")
+        try:
+            with open("/proc/sys/kernel/osrelease", "r") as f:
+                osrelease = f.read().lower()
+                if "linux" in osrelease:
+                    current_os = "linux"
+                    print(f"Container environment detected, forcing OS to Linux")
+        except Exception as e:
+            print(f"Warning: Error checking container environment: {e}")
     
     # Get architecture with additional verification
     current_arch = platform.machine().lower()
@@ -134,6 +247,15 @@ def get_binary_path():
             except Exception as e:
                 print(f"Warning: Error checking binary type: {e}, will try anyway")
                 return site_packages_binary
+    
+    # 4. If binary not found, try to download it
+    try:
+        print("Binary not found locally, attempting to download from GitHub releases...")
+        binary_path = download_binary()
+        if binary_path:
+            return binary_path
+    except Exception as e:
+        print(f"Error downloading binary: {e}")
     
     # If we get here, no appropriate binary was found
     error_msg = f"No binary found for {current_os}_{current_arch}."

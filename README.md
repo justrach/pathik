@@ -4,7 +4,7 @@
   <img src="assets/pathik_logo.png" alt="Pathik Logo">
 </p>
 
-A high-performance web crawler implemented in Go with Python and JavaScript bindings.
+A high-performance web crawler implemented in Go with Python and JavaScript bindings. It converts web pages to both HTML and Markdown formats.
 
 ## Features
 
@@ -49,163 +49,138 @@ Testing with 5 URLs:
 
 Parallel crawling is enabled by default when processing multiple URLs, but you can explicitly control it with the `parallel` parameter.
 
-## Python Installation
+## Installation
 
 ```bash
 pip install pathik
 ```
 
-## JavaScript Installation
+The package will automatically download the correct binary for your platform from GitHub releases on first use.
 
-```bash
-npm install pathik
-```
+## Usage
 
-## Python Usage
+### Python API
 
 ```python
 import pathik
-import os
-
-# Create an output directory with an absolute path
-output_dir = os.path.abspath("output_data")
-os.makedirs(output_dir, exist_ok=True)
 
 # Crawl a single URL
-result = pathik.crawl('https://example.com', output_dir=output_dir)
-print(f"HTML file: {result['https://example.com']['html']}")
-print(f"Markdown file: {result['https://example.com']['markdown']}")
+result = pathik.crawl("https://example.com")
+print(f"HTML saved to: {result['https://example.com']['html']}")
+print(f"Markdown saved to: {result['https://example.com']['markdown']}")
 
-# Crawl multiple URLs in parallel (default behavior)
-urls = [
+# Crawl multiple URLs in parallel
+results = pathik.crawl([
     "https://example.com",
-    "https://news.ycombinator.com",
-    "https://github.com",
-    "https://wikipedia.org"
-]
-results = pathik.crawl(urls, output_dir=output_dir)
+    "https://httpbin.org/html",
+    "https://jsonplaceholder.typicode.com"
+])
 
-# Crawl URLs sequentially (parallel disabled)
-results = pathik.crawl(urls, output_dir=output_dir, parallel=False)
+# To disable parallel crawling
+results = pathik.crawl(urls, parallel=False)
 
-# Crawl and upload to R2
-r2_results = pathik.crawl_to_r2(urls, uuid_str='my-unique-id', parallel=True)
+# To specify output directory
+results = pathik.crawl(urls, output_dir="./output")
 ```
 
-## JavaScript Usage
+### Command Line
 
-```javascript
-const pathik = require('pathik');
-const path = require('path');
-const fs = require('fs');
-
-// Create output directory
-const outputDir = path.resolve('./output_data');
-fs.mkdirSync(outputDir, { recursive: true });
-
-// Crawl a single URL
-pathik.crawl('https://example.com', { outputDir })
-  .then(results => {
-    console.log(`HTML file: ${results['https://example.com'].html}`);
-  });
-
-// Crawl multiple URLs in parallel (default behavior)
-const urls = [
-  'https://example.com',
-  'https://news.ycombinator.com',
-  'https://github.com'
-];
-
-pathik.crawl(urls, { outputDir })
-  .then(results => {
-    console.log(`Crawled ${Object.keys(results).length} URLs`);
-  });
-
-// Crawl URLs sequentially
-pathik.crawl(urls, { outputDir, parallel: false })
-  .then(results => {
-    console.log(`Crawled ${Object.keys(results).length} URLs sequentially`);
-  });
-
-// Upload to R2
-pathik.crawlToR2(urls, { uuid: 'my-unique-id' })
-  .then(results => {
-    console.log('R2 Upload complete');
-  });
-```
-
-## Python API
-
-### pathik.crawl(urls, output_dir=None, parallel=True)
-
-Crawl URLs and save the content locally.
-
-**Parameters:**
-- `urls`: A single URL string or a list of URLs to crawl
-- `output_dir`: Directory to save crawled files (uses a temporary directory if None)
-- `parallel`: Whether to use parallel crawling (default: True)
-
-**Returns:**
-- A dictionary mapping URLs to file paths: `{url: {"html": html_path, "markdown": markdown_path}}`
-
-### pathik.crawl_to_r2(urls, uuid_str=None, parallel=True)
-
-Crawl URLs and upload the content to Cloudflare R2.
-
-**Parameters:**
-- `urls`: A single URL string or a list of URLs to crawl
-- `uuid_str`: UUID to prefix filenames for uploads (generates one if None)
-- `parallel`: Whether to use parallel crawling (default: True)
-
-**Returns:**
-- A dictionary with R2 upload information
-
-## JavaScript API
-
-### pathik.crawl(urls, options)
-
-Crawl URLs and save content locally.
-
-**Parameters:**
-- `urls`: String or array of URLs to crawl
-- `options`: Object with crawl options
-  - `outputDir`: Directory to save output (uses temp dir if null)
-  - `parallel`: Enable/disable parallel crawling (default: true)
-
-**Returns:**
-- Promise resolving to an object mapping URLs to file paths
-
-### pathik.crawlToR2(urls, options)
-
-Crawl URLs and upload content to R2.
-
-**Parameters:**
-- `urls`: String or array of URLs to crawl
-- `options`: Object with R2 options
-  - `uuid`: UUID to prefix filenames (generates random UUID if null)
-  - `parallel`: Enable/disable parallel crawling (default: true)
-
-**Returns:**
-- Promise resolving to an object mapping URLs to R2 keys
-
-## Requirements
-
-- Go 1.18+ (for building the binary)
-- Python 3.6+ or Node.js 14+
-
-## Building from Source
-
-For Python:
 ```bash
-python build_binary.py
+# Crawl a single URL
+pathik crawl https://example.com
+
+# Crawl multiple URLs
+pathik crawl https://example.com https://httpbin.org/html
+
+# Specify output directory
+pathik crawl -o ./output https://example.com
+
+# Use sequential (non-parallel) mode
+pathik crawl -s https://example.com https://httpbin.org/html
+
+# Upload to R2 (Cloudflare)
+pathik r2 https://example.com
+```
+
+## Using in Docker
+
+When using Pathik in a Docker container, you need to install the required dependencies for Chromium:
+
+```dockerfile
+FROM python:3.10-slim
+
+# Install Chromium dependencies
+RUN apt-get update && apt-get install -y \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libx11-6 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxi6 \
+    libxtst6 \
+    libnss3 \
+    libcups2 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libgdk-pixbuf2.0-0 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libdrm2 \
+    libgbm1 \
+    libasound2 \
+    fonts-freefont-ttf
+
+# Install pathik
+RUN pip install pathik
+```
+
+## Development
+
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/justrach/pathik.git
+cd pathik
+
+# Create a virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install in development mode
 pip install -e .
 ```
 
-For JavaScript:
+### Building Binaries Locally
+
 ```bash
-npm run build-binary
-npm install
+# Build for current platform
+python build_binary.py
+
+# Build for all platforms
+python build_binary.py --all
+
+# Build for specific platform
+python build_binary.py --os linux --arch amd64
 ```
+
+### Release Process
+
+Pathik uses GitHub Actions to automate the release process:
+
+1. Create and push a new tag:
+   ```bash
+   git tag -a v0.2.2 -m "Release v0.2.2"
+   git push origin v0.2.2
+   ```
+
+2. GitHub Actions will:
+   - Build binaries for all supported platforms
+   - Create a GitHub Release with the binaries
+   - Build and publish the Python package to PyPI
+
+The PyPI package will download the appropriate binary from GitHub releases when needed.
 
 ## License
 

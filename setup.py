@@ -60,8 +60,11 @@ def build_go_binary(target_os=None, target_arch=None):
         env = os.environ.copy()
         env["GOOS"] = target_os
         env["GOARCH"] = target_arch
-        output_path = f"pathik/bin/{target_os}_{target_arch}/{binary_name}"
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # For GitHub Actions releases, output to releases directory
+        release_dir = os.path.join("releases", f"{target_os}_{target_arch}")
+        os.makedirs(release_dir, exist_ok=True)
+        output_path = os.path.join(release_dir, binary_name)
         
         # Run go build
         build_cmd = ["go", "build", "-o", output_path, "./main.go"]
@@ -73,16 +76,9 @@ def build_go_binary(target_os=None, target_arch=None):
         
         print(f"Go binary built successfully: {output_path}")
         
-        # For the current platform, also copy to the main directory
-        current_os, current_arch = detect_platform()
-        if target_os == current_os and target_arch == current_arch:
-            main_binary_path = f"pathik/{binary_name}"
-            shutil.copy2(output_path, main_binary_path)
-            print(f"Copied current platform binary to {main_binary_path}")
-            
-            # Make sure it's executable
-            if target_os != "windows":
-                os.chmod(main_binary_path, 0o755)
+        # Make binary executable
+        if target_os != "windows":
+            os.chmod(output_path, 0o755)
                 
         return output_path
     else:
@@ -114,44 +110,40 @@ def build_all_binaries():
 class BuildGoCommand:
     """Mixin to build Go binary before installation"""
     def run(self):
-        # Build the Go binary for the current platform
+        # For local development only, build the binary for the current platform
         try:
             current_os, current_arch = detect_platform()
-            build_go_binary(current_os, current_arch)
+            # Only build if we're in development mode and have go installed
+            if os.path.exists("go.mod") and shutil.which("go"):
+                build_go_binary(current_os, current_arch)
         except Exception as e:
             print(f"Warning: Failed to build Go binary: {e}")
-            print("Package will be installed without the binary. Run build_binary.py manually.")
+            print("Binary will be downloaded during first use.")
         
         # Run the original command
         super().run()
 
-class BuildSdistWithBinary(sdist):
-    """Custom sdist command that includes pre-built binaries for all platforms"""
+class BuildSdistWithoutBinary(sdist):
+    """Custom sdist command that excludes binaries to keep package size small"""
     def run(self):
-        # Build the binaries for all platforms
-        try:
-            build_all_binaries()
-        except Exception as e:
-            print(f"Warning: Failed to build Go binaries: {e}")
+        # Create empty bin directories to maintain structure
+        os.makedirs("pathik/bin", exist_ok=True)
         
         # Run the original sdist
         super().run()
 
 class BuildWheel(bdist_wheel):
-    """Custom wheel command that includes binary for all platforms"""
+    """Custom wheel command that excludes binaries to keep package size small"""
     def run(self):
-        # Build binaries for all platforms
-        try:
-            build_all_binaries()
-        except Exception as e:
-            print(f"Warning: Failed to build Go binaries: {e}")
+        # Create empty bin directories to maintain structure
+        os.makedirs("pathik/bin", exist_ok=True)
             
         # Run the original wheel build
         super().run()
     
     def finalize_options(self):
         # Mark the wheel as platform independent since we include
-        # binaries for all platforms
+        # binaries for all platforms via dynamic download
         super().finalize_options()
         self.root_is_pure = True
 
@@ -178,14 +170,18 @@ setup(
     url="https://github.com/justrach/pathik",
     packages=find_packages(),
     package_data={
-        "pathik": ["pathik_bin*", "bin/**/*"],
+        "pathik": ["bin/.gitkeep"],  # Just include a placeholder
     },
     cmdclass={
         'install': InstallWithGoBuild,
         'develop': DevelopWithGoBuild,
-        'sdist': BuildSdistWithBinary,
+        'sdist': BuildSdistWithoutBinary,
         'bdist_wheel': BuildWheel,
     },
+    install_requires=[
+        "requests>=2.25.0",  # For downloading binaries
+        "tqdm>=4.50.0",      # For download progress bar
+    ],
     python_requires='>=3.6',
     classifiers=[
         "Programming Language :: Python :: 3",
