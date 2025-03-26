@@ -47,6 +47,17 @@ jobs:
         echo "Searching for all binary files:"
         find pathik -type f -name "pathik_bin*" || echo "No binaries found"
     
+    - name: Prepare binaries with unique names
+      run: |
+        mkdir -p release_assets
+        cp pathik/bin/darwin_amd64/pathik_bin release_assets/pathik_bin_darwin_amd64
+        cp pathik/bin/darwin_arm64/pathik_bin release_assets/pathik_bin_darwin_arm64
+        cp pathik/bin/linux_amd64/pathik_bin release_assets/pathik_bin_linux_amd64
+        cp pathik/bin/linux_arm64/pathik_bin release_assets/pathik_bin_linux_arm64
+        cp pathik/bin/windows_amd64/pathik_bin.exe release_assets/pathik_bin_windows_amd64.exe
+        
+        ls -la release_assets
+        
     - name: Create GitHub Release
       id: create_release
       uses: softprops/action-gh-release@v1
@@ -55,7 +66,7 @@ jobs:
         draft: false
         prerelease: false
         token: ${{ secrets.GITHUB_TOKEN }}
-        files: pathik/bin/**/*pathik_bin*
+        files: release_assets/*
     
     - name: Build Python package
       run: |
