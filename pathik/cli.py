@@ -6,7 +6,9 @@ import argparse
 import sys
 import os
 import json
+import subprocess
 from . import crawl, crawl_to_r2
+from .crawler import get_binary_path
 
 def main():
     """Main entry point for the CLI"""
@@ -24,6 +26,13 @@ def main():
     r2_parser.add_argument("urls", nargs="+", help="URLs to crawl")
     r2_parser.add_argument("-u", "--uuid", help="UUID to use for file prefixes")
     r2_parser.add_argument("-s", "--sequential", action="store_true", help="Use sequential (non-parallel) crawling")
+    
+    # Kafka command
+    kafka_parser = subparsers.add_parser("kafka", help="Crawl websites and stream to Kafka")
+    kafka_parser.add_argument("urls", nargs="+", help="URLs to crawl")
+    kafka_parser.add_argument("-s", "--sequential", action="store_true", help="Use sequential (non-parallel) crawling")
+    kafka_parser.add_argument("-b", "--brokers", help="Kafka brokers (comma-separated)")
+    kafka_parser.add_argument("-t", "--topic", help="Kafka topic to stream to")
     
     # Version command
     version_parser = subparsers.add_parser("version", help="Print version information")
@@ -75,6 +84,40 @@ def main():
                 print(f"   UUID: {info.get('uuid')}")
                 print(f"   HTML Key: {info.get('r2_html_key')}")
                 print(f"   Markdown Key: {info.get('r2_markdown_key')}")
+        
+        elif args.command == "kafka":
+            # For Kafka we need to use the Go binary directly
+            try:
+                binary_path = get_binary_path()
+                cmd = [binary_path, "-kafka"]
+                
+                # Add parallel flag if sequential is not specified
+                if not args.sequential:
+                    cmd.append("-parallel")
+                
+                # Add Kafka-specific options if provided
+                if args.brokers:
+                    os.environ["KAFKA_BROKERS"] = args.brokers
+                if args.topic:
+                    os.environ["KAFKA_TOPIC"] = args.topic
+                
+                # Add URLs
+                cmd.extend(args.urls)
+                
+                print(f"Running: {' '.join(cmd)}")
+                process = subprocess.run(cmd, check=True)
+                
+                if process.returncode == 0:
+                    print("\nKafka Streaming Results:")
+                    print("-----------------------")
+                    print(f"✅ Successfully streamed {len(args.urls)} URLs to Kafka")
+                else:
+                    print(f"❌ Error streaming to Kafka, exit code: {process.returncode}")
+                    return process.returncode
+                    
+            except Exception as e:
+                print(f"❌ Error executing Kafka command: {e}")
+                return 1
         
         elif args.command == "version":
             from . import __version__  # Importing here to avoid circular imports

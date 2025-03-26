@@ -82,8 +82,14 @@ def download_binary(version=None):
         print(f"Binary already exists at {binary_path}")
         return binary_path
     
-    # GitHub release URL
-    github_release_url = f"https://github.com/justrach/pathik/releases/download/v{version}/{current_os}_{current_arch}/{binary_name}"
+    # Update URL to match actual asset naming pattern (binary has platform in filename)
+    platform_suffix = f"_{current_os}_{current_arch}"
+    if current_os == "windows":
+        binary_platform_name = f"pathik_bin{platform_suffix}.exe"
+    else:
+        binary_platform_name = f"pathik_bin{platform_suffix}"
+    
+    github_release_url = f"https://github.com/justrach/pathik/releases/download/v{version}/{binary_platform_name}"
     print(f"Downloading from: {github_release_url}")
     
     # Try downloading 3 times with backoff

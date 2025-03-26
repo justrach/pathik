@@ -5,7 +5,7 @@ print(f"Loading pathik package from {__file__}")
 print(f"Python path: {sys.path}")
 
 # Set version
-__version__ = "0.2.2"
+__version__ = "0.2.13"
 
 # Import the crawler functions
 try:
