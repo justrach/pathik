@@ -55,12 +55,7 @@ jobs:
         draft: false
         prerelease: false
         token: ${{ secrets.GITHUB_TOKEN }}
-        files: |
-          pathik/bin/darwin_amd64/pathik_bin
-          pathik/bin/darwin_arm64/pathik_bin
-          pathik/bin/linux_amd64/pathik_bin
-          pathik/bin/linux_arm64/pathik_bin
-          pathik/bin/windows_amd64/pathik_bin.exe
+        files: pathik/bin/**/*pathik_bin*
     
     - name: Build Python package
       run: |
