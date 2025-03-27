@@ -14,7 +14,7 @@ import time
 import shutil
 
 # Set version
-__version__ = "0.3.0"  # Incremented version for command ordering fix
+__version__ = "0.3.1"  # Incremented version for command ordering fix
 
 # NOTE: Version 0.3.32 fixes a critical bug with command-line argument ordering.
 # Previously, flags were incorrectly placed after URLs, causing errors like:
