@@ -428,76 +428,150 @@ def crawl(urls: List[str], output_dir: Optional[str] = None, parallel: bool = Tr
 
 def crawl_to_r2(urls: List[str], uuid_str: Optional[str] = None, parallel: bool = True) -> Dict[str, Dict[str, str]]:
     """
-    Crawl the specified URLs and upload the results to R2.
+    Upload the given URLs to R2
     
     Args:
-        urls: A list of URLs to crawl or a single URL string
-        uuid_str: UUID to prefix filenames (generates one if None)
-        parallel: Whether to use parallel crawling (default: True)
-    
+        urls: List of URLs to upload
+        uuid_str: UUID to use for the upload (defaults to a random UUID)
+        parallel: Whether to use parallel processing
+        
     Returns:
-        A dictionary with upload information
+        Dictionary mapping URLs to R2 upload results
+    """
+    if not urls:
+        return {}
+    
+    # Generate a UUID if not provided
+    if not uuid_str:
+        uuid_str = str(uuid.uuid4())
+    
+    # Prepare command
+    command = ["-r2", f"-uuid={uuid_str}"]
+    if not parallel:
+        command.append("-parallel=false")
+    command.extend(urls)
+    
+    # Run the Go command
+    try:
+        stdout, stderr = _run_go_command(command)
+        
+        # Parse output to get file paths
+        lines = stdout.splitlines()
+        result = {}
+        
+        # Extract results
+        current_url = None
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Check if this is a new URL
+            if line.startswith("Processing URL: "):
+                current_url = line[len("Processing URL: "):]
+                result[current_url] = {"uuid": uuid_str}
+            
+            # Look for R2 keys
+            if current_url and "HTML uploaded to R2: " in line:
+                r2_html_key = line.split("HTML uploaded to R2: ")[1].strip()
+                result[current_url]["r2_html_key"] = r2_html_key
+            
+            if current_url and "Markdown uploaded to R2: " in line:
+                r2_md_key = line.split("Markdown uploaded to R2: ")[1].strip()
+                result[current_url]["r2_markdown_key"] = r2_md_key
+            
+            # Look for local file paths
+            if current_url and "HTML written to: " in line:
+                html_file = line.split("HTML written to: ")[1].strip()
+                result[current_url]["local_html_file"] = html_file
+            
+            if current_url and "Markdown written to: " in line:
+                md_file = line.split("Markdown written to: ")[1].strip()
+                result[current_url]["local_markdown_file"] = md_file
+        
+        return result
+    
+    except Exception as e:
+        # Create an error result for each URL
+        return {url: {"error": str(e), "uuid": uuid_str} for url in urls}
+
+
+def stream_to_kafka(
+    urls: Union[str, List[str]], 
+    content_type: str = "both",
+    topic: Optional[str] = None,
+    session: Optional[str] = None,
+    parallel: bool = True
+) -> Dict[str, Dict[str, Union[bool, str]]]:
+    """
+    Stream the content from the given URLs to Kafka
+    
+    Args:
+        urls: A single URL or list of URLs to crawl and stream
+        content_type: Type of content to stream: "html", "markdown", or "both"
+        topic: Kafka topic to stream to (uses KAFKA_TOPIC env var if None)
+        session: Session ID for multi-user environments
+        parallel: Whether to use parallel crawling for multiple URLs
+        
+    Returns:
+        Dictionary mapping URLs to their streaming status
     """
     # Convert single URL to list
     if isinstance(urls, str):
         urls = [urls]
         
     if not urls:
-        raise ValueError("No URLs provided")
+        return {}
     
-    # Generate UUID if not provided
-    if uuid_str is None:
-        uuid_str = str(uuid.uuid4())
+    # Validate content type
+    if content_type not in ["html", "markdown", "both"]:
+        raise ValueError("Content type must be 'html', 'markdown', or 'both'")
     
-    # Create a temporary directory for the crawled files
-    temp_dir = tempfile.mkdtemp(prefix="pathik_")
+    # Prepare command
+    command = ["-kafka"]
     
+    # Add parallel flag if needed
+    if not parallel:
+        command.append("-parallel=false")
+    
+    # Add content type if not 'both'
+    if content_type != "both":
+        command.extend(["-content", content_type])
+    
+    # Add topic if specified
+    if topic:
+        command.extend(["-topic", topic])
+    
+    # Add session ID if provided
+    if session:
+        command.extend(["-session", session])
+    
+    # Add URLs
+    command.extend(urls)
+    
+    # Run the Go command
     try:
-        # First crawl the URLs with local storage using parallel flag
-        crawl_result = crawl(urls, output_dir=temp_dir, parallel=parallel)
+        stdout, stderr = _run_go_command(command)
         
-        # Process results
+        # Parse output to get status
+        lines = stdout.splitlines()
         result = {}
         
-        # Upload each URL individually
+        # Extract results
         for url in urls:
-            # Create the command for this URL
-            binary_path = get_binary_path()
-            command = [binary_path, "-r2", "-uuid", uuid_str, "-dir", temp_dir, url]
+            result[url] = {"success": True}
             
-            current_dir = os.getcwd()
-            try:
-                os.chdir(os.path.dirname(os.path.abspath(__file__)))
-                print(f"Running command: {' '.join(command)}")
-                
-                process = subprocess.run(
-                    command,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True
-                )
-                
-                if process.returncode != 0:
-                    print(f"Error: {process.stderr}")
-                    raise CrawlerError(f"Command failed with code {process.returncode}: {process.stderr}")
-                    
-                print(f"Command stdout: {process.stdout[:200]}...")
-                
-                # Add result for this URL
-                result[url] = {
-                    "uuid": uuid_str,
-                    "r2_html_key": f"{uuid_str}+{_sanitize_url(url)}.html",
-                    "r2_markdown_key": f"{uuid_str}+{_sanitize_url(url)}.md",
-                    "local_html_file": crawl_result[url].get("html"),
-                    "local_markdown_file": crawl_result[url].get("markdown")
-                }
-            finally:
-                os.chdir(current_dir)
+            # Look for specific error messages for each URL
+            for line in lines:
+                if url in line and ("Error" in line or "Failed" in line):
+                    error_msg = line.split(":", 1)[1].strip() if ":" in line else line
+                    result[url] = {"success": False, "error": error_msg}
+                    break
         
         return result
-    finally:
-        # Keep the temp directory for debugging
-        print(f"Temporary directory with files: {temp_dir}")
+    
+    except Exception as e:
+        # Create an error result for each URL
+        return {url: {"success": False, "error": str(e)} for url in urls}
 
 
 def _find_files_for_url(directory: str, url: str) -> Tuple[str, str]:

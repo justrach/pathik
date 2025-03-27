@@ -13,6 +13,7 @@ A high-performance web crawler implemented in Go with Python and JavaScript bind
 - Markdown conversion
 - Parallel URL processing
 - Cloudflare R2 integration
+- Kafka streaming support
 - Memory-efficient (uses ~10x less memory than browser automation tools)
 
 ## Performance Benchmarks
@@ -61,6 +62,8 @@ The package will automatically download the correct binary for your platform fro
 
 ### Python API
 
+#### Basic Crawling
+
 ```python
 import pathik
 
@@ -81,6 +84,58 @@ results = pathik.crawl(urls, parallel=False)
 
 # To specify output directory
 results = pathik.crawl(urls, output_dir="./output")
+```
+
+#### R2 Upload
+
+```python
+import pathik
+import uuid
+
+# Generate a UUID or use your own
+my_uuid = str(uuid.uuid4())
+
+# Crawl and upload to R2
+results = pathik.crawl_to_r2("https://example.com", uuid_str=my_uuid)
+print(f"UUID: {results['https://example.com']['uuid']}")
+print(f"R2 HTML key: {results['https://example.com']['r2_html_key']}")
+print(f"R2 Markdown key: {results['https://example.com']['r2_markdown_key']}")
+
+# Upload multiple URLs
+results = pathik.crawl_to_r2([
+    "https://example.com",
+    "https://httpbin.org/html"
+], uuid_str=my_uuid)
+```
+
+#### Kafka Streaming
+
+```python
+import pathik
+import uuid
+
+# Generate a session ID for tracking
+session_id = str(uuid.uuid4())
+
+# Stream a single URL to Kafka
+result = pathik.stream_to_kafka("https://example.com", session=session_id)
+print(f"Success: {result['https://example.com']['success']}")
+
+# Stream multiple URLs with custom options
+results = pathik.stream_to_kafka(
+    urls=["https://example.com", "https://httpbin.org/html"],
+    content_type="html",        # Options: "html", "markdown", or "both"
+    topic="custom_topic",       # Optional custom topic
+    session=session_id,         # Optional session ID
+    parallel=True               # Process URLs in parallel (default)
+)
+
+# Check results
+for url, status in results.items():
+    if status["success"]:
+        print(f"Successfully streamed {url}")
+    else:
+        print(f"Failed to stream {url}: {status.get('error')}")
 ```
 
 ### Command Line
@@ -105,19 +160,19 @@ pathik r2 https://example.com
 pathik kafka https://example.com
 
 # Stream only HTML content to Kafka
-pathik kafka -content html https://example.com
+pathik kafka -c html https://example.com
 
 # Stream only Markdown content to Kafka
-pathik kafka -content markdown https://example.com
+pathik kafka -c markdown https://example.com
 
 # Stream to a specific Kafka topic
-pathik kafka -topic user1_crawl_data https://example.com
+pathik kafka -t user1_crawl_data https://example.com
 
 # Add a session ID for multi-user environments
 pathik kafka --session user123 https://example.com
 
 # Combine options
-pathik kafka -content html -topic user1_data --session user123 https://example.com
+pathik kafka -c html -t user1_data --session user123 https://example.com
 ```
 
 ## Kafka Streaming
@@ -148,6 +203,7 @@ When streaming to Kafka, Pathik sends two messages per URL:
      - url: The original URL
      - contentType: "text/html"
      - timestamp: ISO 8601 timestamp
+     - session: Session ID (if provided)
 
 2. Markdown Content:
    - Key: URL
@@ -156,51 +212,52 @@ When streaming to Kafka, Pathik sends two messages per URL:
      - url: The original URL
      - contentType: "text/markdown"
      - timestamp: ISO 8601 timestamp
+     - session: Session ID (if provided)
 
-### Usage with Kafka Consumers
+### Kafka Consumer Examples
 
-Here's a minimal example of consuming Pathik messages with a Kafka consumer:
+Pathik includes example consumers for Go, Python, and JavaScript in the `examples` directory.
 
-```go
-package main
+#### Python Consumer Example
 
-import (
-    "context"
-    "fmt"
-    "github.com/segmentio/kafka-go"
+```python
+from kafka import KafkaConsumer
+import json
+
+# Connect to Kafka
+consumer = KafkaConsumer(
+    'pathik_crawl_data',                  # Topic
+    bootstrap_servers=['localhost:9092'],
+    auto_offset_reset='earliest',         # Start from beginning
+    enable_auto_commit=True,
+    group_id='pathik-consumer-group'
 )
 
-func main() {
-    reader := kafka.NewReader(kafka.ReaderConfig{
-        Brokers:   []string{"localhost:9092"},
-        Topic:     "pathik_crawl_data",
-        Partition: 0,
-        MinBytes:  10e3, // 10KB
-        MaxBytes:  10e6, // 10MB
-    })
-    defer reader.Close()
+# Optional: filter by session ID
+session_filter = "user123"  # Set to None to receive all messages
 
-    for {
-        m, err := reader.ReadMessage(context.Background())
-        if err != nil {
-            break
-        }
+# Process messages
+for message in consumer:
+    # Extract headers
+    headers = {k: v.decode('utf-8') for k, v in message.headers}
+    
+    # Filter by session if needed
+    if session_filter and headers.get('session') != session_filter:
+        continue
         
-        url := string(m.Key)
-        contentType := ""
-        
-        // Extract content type from headers
-        for _, header := range m.Headers {
-            if header.Key == "contentType" {
-                contentType = string(header.Value)
-                break
-            }
-        }
-        
-        fmt.Printf("Received from %s: %s content (%d bytes)\n", 
-            url, contentType, len(m.Value))
-    }
-}
+    # Get message details
+    url = message.key.decode('utf-8')
+    content_type = headers.get('contentType')
+    
+    print(f"Received from {url}: {content_type} content ({len(message.value)} bytes)")
+    
+    # Process content based on type
+    if content_type == 'text/html':
+        # Process HTML...
+        pass
+    elif content_type == 'text/markdown':
+        # Process Markdown...
+        pass
 ```
 
 ## Using in Docker

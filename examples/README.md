@@ -75,6 +75,42 @@ python kafka_consumer.py --from-beginning
 python kafka_consumer.py --username=user --password=pass
 ```
 
+### JavaScript Example
+
+#### Requirements
+
+```bash
+# Install dependencies
+cd examples
+npm install
+```
+
+#### Usage
+
+```bash
+# Run with default settings (localhost:9092, topic: pathik_crawl_data)
+node kafka_consumer.js
+
+# Specify brokers and topic
+node kafka_consumer.js --brokers=localhost:9092 --topic=my-topic
+
+# Filter by content type
+node kafka_consumer.js --type=html
+node kafka_consumer.js --type=markdown
+
+# Filter by session ID (useful for multi-user environments)
+node kafka_consumer.js --session=user123
+
+# Combine filters
+node kafka_consumer.js --type=html --session=user123
+
+# Consume from the beginning of the topic
+node kafka_consumer.js --from-beginning
+
+# With authentication
+node kafka_consumer.js --username=user --password=pass
+```
+
 ## Setting Up Kafka for Local Development
 
 There are several ways to run Kafka locally:
@@ -155,6 +191,8 @@ kubectl apply -f https://strimzi.io/examples/latest/kafka/kafka-persistent-singl
    go run kafka_consumer.go
    # or
    python kafka_consumer.py
+   # or
+   node kafka_consumer.js
    ```
 
 ### Crawling Multiple URLs in Parallel
@@ -176,3 +214,5 @@ pathik kafka https://example.com https://huewheel.com https://ycombinator.com
 # Disable parallel crawling with -s/--sequential flag
 pathik kafka -s https://example.com https://huewheel.com https://ycombinator.com
 ```
+
+## Multi-URL and Multi-User Examples

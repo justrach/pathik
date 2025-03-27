@@ -317,7 +317,99 @@ function execPromise(command) {
   });
 }
 
+/**
+ * Stream crawled content from a URL or list of URLs to Kafka
+ * 
+ * @param {string|string[]} urls - URL or array of URLs to crawl and stream
+ * @param {Object} options - Kafka streaming options
+ * @param {boolean} [options.parallel=true] - Whether to use parallel crawling
+ * @param {string} [options.contentType='both'] - Content type to stream: 'html', 'markdown', or 'both'
+ * @param {string} [options.topic=null] - Kafka topic to stream to (uses KAFKA_TOPIC env var if null)
+ * @param {string} [options.session=null] - Session ID for multi-user environments
+ * @returns {Promise<Object>} Result mapping URLs to streaming status
+ */
+async function streamToKafka(urls, options = {}) {
+  // Normalize inputs
+  const urlList = Array.isArray(urls) ? urls : [urls];
+  if (urlList.length === 0) {
+    throw new Error('No URLs provided');
+  }
+  
+  // Set default options
+  const parallel = options.parallel !== undefined ? options.parallel : true;
+  const contentType = options.contentType || 'both';
+  const topic = options.topic || null;
+  const session = options.session || null;
+
+  // Validate content type
+  if (!['html', 'markdown', 'both'].includes(contentType)) {
+    throw new Error('Invalid contentType. Must be "html", "markdown", or "both"');
+  }
+
+  // Get binary path
+  const binaryPath = await getBinaryPath();
+  console.log(`Using binary at: ${binaryPath}`);
+
+  // Build command
+  let command = `"${binaryPath}" -kafka`;
+  
+  // Add parallel flag if needed
+  if (!parallel) {
+    command += ' -parallel=false';
+  }
+  
+  // Add content type if not 'both'
+  if (contentType !== 'both') {
+    command += ` -content ${contentType}`;
+  }
+  
+  // Add topic if specified
+  if (topic) {
+    command += ` -topic ${topic}`;
+  }
+  
+  // Add session ID if provided
+  if (session) {
+    command += ` -session ${session}`;
+  }
+  
+  // Add URLs
+  command += ' ' + urlList.map(url => `"${url}"`).join(' ');
+
+  console.log(`Executing command: ${command}`);
+  
+  // Process URLs
+  const results = {};
+  
+  try {
+    // Execute command
+    const { error, stdout, stderr } = await execPromise(command);
+    
+    if (error) {
+      console.error(`Error during Kafka streaming: ${stderr}`);
+      throw new Error(`Command failed: ${stderr}`);
+    }
+    
+    console.log(stdout);
+    
+    // Process results
+    for (const url of urlList) {
+      results[url] = { success: true };
+    }
+  } catch (err) {
+    console.error(`Failed in Kafka streaming: ${err.message}`);
+    
+    // Mark all URLs as failed
+    for (const url of urlList) {
+      results[url] = { error: err.message };
+    }
+  }
+
+  return results;
+}
+
 module.exports = {
   crawl,
-  crawlToR2
+  crawlToR2,
+  streamToKafka
 }; 

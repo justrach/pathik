@@ -101,6 +101,39 @@ pathik.crawlToR2(['https://example.com'], { uuid: 'my-unique-id' })
   });
 ```
 
+### Kafka Streaming
+
+Stream crawled content directly to Kafka:
+
+```javascript
+const pathik = require('pathik');
+const crypto = require('crypto');
+
+// Generate a session ID to identify this batch
+const sessionId = crypto.randomUUID();
+
+// Crawl and stream to Kafka
+pathik.streamToKafka(['https://example.com'], { 
+  contentType: 'both',    // 'html', 'markdown', or 'both'
+  session: sessionId,     // Session ID for batch identification
+  topic: 'custom-topic'   // Optional custom topic (uses KAFKA_TOPIC env var by default)
+})
+  .then(results => {
+    console.log('Kafka streaming results:');
+    
+    for (const [url, result] of Object.entries(results)) {
+      if (result.success) {
+        console.log(`✓ ${url}: Successfully streamed to Kafka`);
+      } else {
+        console.log(`✗ ${url}: Failed - ${result.error}`);
+      }
+    }
+  })
+  .catch(error => {
+    console.error(`Error during Kafka streaming: ${error.message}`);
+  });
+```
+
 ### Command-line Interface
 
 ```bash
@@ -118,6 +151,9 @@ pathik crawl https://example.com https://news.ycombinator.com --no-parallel -o .
 
 # Crawl and upload to R2
 pathik r2 https://example.com -u my-unique-id
+
+# Stream to Kafka
+pathik kafka https://example.com --session my-session-id --content both
 ```
 
 ## API
@@ -141,6 +177,36 @@ Crawl URLs and upload content to R2.
   - `uuid`: UUID to prefix filenames (generates random UUID if null)
   - `parallel`: Boolean to enable/disable parallel crawling (default: true)
 - Returns: Promise resolving to an object mapping URLs to R2 keys
+
+### pathik.streamToKafka(urls, options)
+
+Crawl URLs and stream content to Kafka.
+
+- `urls`: String or array of URLs to crawl
+- `options`: Object with Kafka options
+  - `contentType`: Type of content to stream: 'html', 'markdown', or 'both' (default: 'both')
+  - `topic`: Custom Kafka topic (uses KAFKA_TOPIC env var if not specified)
+  - `session`: Session ID for identifying this batch of messages
+  - `parallel`: Boolean to enable/disable parallel crawling (default: true)
+- Returns: Promise resolving to an object mapping URLs to streaming status
+
+## Environment Variables
+
+### For R2 Storage
+
+- `R2_ACCOUNT_ID`: Cloudflare account ID
+- `R2_ACCESS_KEY_ID`: Cloudflare R2 access key ID
+- `R2_ACCESS_KEY_SECRET`: Cloudflare R2 access key secret
+- `R2_BUCKET_NAME`: Cloudflare R2 bucket name
+
+### For Kafka Streaming
+
+- `KAFKA_BROKERS`: Comma-separated list of Kafka brokers (default: 'localhost:9092')
+- `KAFKA_TOPIC`: Topic to publish messages to (default: 'pathik_crawl_data')
+- `KAFKA_USERNAME`: Username for SASL authentication (optional)
+- `KAFKA_PASSWORD`: Password for SASL authentication (optional)
+- `KAFKA_CLIENT_ID`: Client ID for Kafka producer (optional)
+- `KAFKA_USE_TLS`: Whether to use TLS connection (true/false, optional)
 
 ## Building the Binary
 
