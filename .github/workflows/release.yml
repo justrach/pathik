@@ -24,24 +24,39 @@ jobs:
       with:
         python-version: '3.10'
     
+    - name: Set up Go module structure
+      run: |
+        # Create proper Go module structure for correct imports
+        mkdir -p $HOME/go/src/github.com/justrach
+        cp -r $GITHUB_WORKSPACE $HOME/go/src/github.com/justrach/pathik
+        echo "GOPATH=$HOME/go" >> $GITHUB_ENV
+        echo "WORKING_DIR=$HOME/go/src/github.com/justrach/pathik" >> $GITHUB_ENV
+    
     - name: Install dependencies
       run: |
+        cd ${{ env.WORKING_DIR }}
         python -m pip install --upgrade pip
         pip install setuptools wheel twine build requests
     
     - name: Extract version from tag
       id: get_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      run: |
+        cd ${{ env.WORKING_DIR }}
+        echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
     
     - name: Build binaries for all platforms
-      run: python build_binary.py --all
+      run: |
+        cd ${{ env.WORKING_DIR }}
+        python build_binary.py --all
     
     - name: Check output structure
       run: |
+        cd ${{ env.WORKING_DIR }}
         find . -name "pathik_bin*" | sort
     
     - name: Debug pathik directory
       run: |
+        cd ${{ env.WORKING_DIR }}
         echo "Contents of the bin directory:"
         ls -la pathik/bin/ || echo "Directory not found"
         echo "Searching for all binary files:"
@@ -49,6 +64,7 @@ jobs:
     
     - name: Prepare binaries with unique names
       run: |
+        cd ${{ env.WORKING_DIR }}
         mkdir -p release_assets
         cp pathik/bin/darwin_amd64/pathik_bin release_assets/pathik_bin_darwin_amd64
         cp pathik/bin/darwin_arm64/pathik_bin release_assets/pathik_bin_darwin_arm64
@@ -66,10 +82,11 @@ jobs:
         draft: false
         prerelease: false
         token: ${{ secrets.GITHUB_TOKEN }}
-        files: release_assets/*
+        files: ${{ env.WORKING_DIR }}/release_assets/*
     
     - name: Build Python package
       run: |
+        cd ${{ env.WORKING_DIR }}
         # Ensure version numbers match
         sed -i "s/VERSION = '.*'/VERSION = '${{ env.VERSION }}'/g" setup.py
         sed -i "s/__version__ = \".*\"/__version__ = \"${{ env.VERSION }}\"/g" pathik/__init__.py
@@ -82,6 +99,7 @@ jobs:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
       run: |
+        cd ${{ env.WORKING_DIR }}
         twine upload dist/*
 
   publish-npm:
@@ -106,11 +124,20 @@ jobs:
     - name: Extract version from tag
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
     
+    - name: Set up working directory
+      run: |
+        mkdir -p $HOME/go/src/github.com/justrach
+        cp -r $GITHUB_WORKSPACE $HOME/go/src/github.com/justrach/pathik
+        echo "WORKING_DIR=$HOME/go/src/github.com/justrach/pathik" >> $GITHUB_ENV
+    
     - name: Create JS package binaries directory
-      run: mkdir -p pathik-js/bin
+      run: |
+        cd ${{ env.WORKING_DIR }}
+        mkdir -p pathik-js/bin
     
     - name: Download released binaries
       run: |
+        cd ${{ env.WORKING_DIR }}
         # Create a temporary directory to download the binaries
         mkdir -p temp_binaries
         
@@ -124,6 +151,7 @@ jobs:
     
     - name: Copy binaries to JS package
       run: |
+        cd ${{ env.WORKING_DIR }}
         # Create platform-specific directories
         mkdir -p pathik-js/bin/darwin-amd64
         mkdir -p pathik-js/bin/darwin-arm64
@@ -149,18 +177,18 @@ jobs:
     
     - name: Update package version
       run: |
-        cd pathik-js
+        cd ${{ env.WORKING_DIR }}/pathik-js
         npm version ${{ env.VERSION }} --no-git-tag-version
         cat package.json | grep version
     
     - name: Install dependencies
       run: |
-        cd pathik-js
+        cd ${{ env.WORKING_DIR }}/pathik-js
         npm install
     
     - name: Publish to npm
       run: |
-        cd pathik-js
+        cd ${{ env.WORKING_DIR }}/pathik-js
         npm publish
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} 
