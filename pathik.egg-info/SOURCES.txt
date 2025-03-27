@@ -9,6 +9,8 @@ setup.py
 pathik/__init__.py
 pathik/cli.py
 pathik/crawler.py
+pathik/safe_api.py
+pathik/schema.py
 pathik/simple.py
 pathik.egg-info/PKG-INFO
 pathik.egg-info/SOURCES.txt
@@ -23,3 +25,6 @@ pathik/bin/darwin_arm64/pathik_bin
 pathik/bin/linux_amd64/pathik_bin
 pathik/bin/linux_arm64/pathik_bin
 pathik/bin/windows_amd64/pathik_bin.exe
+test/test_command_ordering.py
+test/test_fixed_impl.py
+test/test_safe_api.py

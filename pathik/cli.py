@@ -116,19 +116,16 @@ def crawl(urls: Union[str, List[str]],
         # Get the binary path
         binary_path = get_binary_path()
         
-        # Prepare the command with proper order:
-        # binary -crawl URLs -options
-        command = [binary_path, "-crawl"]
+        # FIXED: Prepare the command with correct order:
+        # binary [options] -crawl URLs
+        command = [binary_path]
         
-        # Add URLs
-        command.extend(urls)
+        # Add output directory BEFORE -crawl
+        command.extend(["-outdir", output_dir])
         
-        # Add output directory
-        command.extend(["-o", output_dir])
-        
-        # Add basic options
+        # Add basic options BEFORE -crawl
         if parallel:
-            command.append("-p")
+            command.append("-parallel")
         if selector:
             command.extend(["-s", selector])
         if selector_files:
@@ -171,29 +168,35 @@ def crawl(urls: Union[str, List[str]],
         
         # Content type option
         if content_type:
-            command.extend(["--content-type", content_type])
+            command.extend(["-content", content_type])
         
         # Kafka options
         if kafka:
             command.append("-kafka")
             
             if kafka_brokers:
-                command.extend(["--kafka-brokers", kafka_brokers])
+                command.extend(["-brokers", kafka_brokers])
             if kafka_topic:
-                command.extend(["--kafka-topic", kafka_topic])
+                command.extend(["-topic", kafka_topic])
             if kafka_username:
-                command.extend(["--kafka-username", kafka_username])
+                command.extend(["-username", kafka_username])
             if kafka_password:
-                command.extend(["--kafka-password", kafka_password])
+                command.extend(["-password", kafka_password])
             if kafka_client_id:
-                command.extend(["--kafka-client-id", kafka_client_id])
+                command.extend(["-client-id", kafka_client_id])
             if kafka_use_tls:
-                command.append("--kafka-use-tls")
+                command.append("-use-tls")
         
         # Session ID option
         if session_id:
-            command.extend(["--session-id", session_id])
-
+            command.extend(["-session", session_id])
+            
+        # Add -crawl flag AFTER options
+        command.append("-crawl")
+        
+        # Add URLs AFTER -crawl
+        command.extend(urls)
+        
         # Run the command
         print(f"Running command: {' '.join(command)}")
         stdout, stderr = _run_go_command(command)
@@ -208,8 +211,49 @@ def crawl(urls: Union[str, List[str]],
                 
             return crawl_result
         except json.JSONDecodeError:
-            # If JSON parsing fails, return raw result
-            return {"raw_output": stdout, "session_id": session_id if session_id else None}
+            # If JSON parsing fails, create a structured result from raw output
+            # Format: map URLs to file paths found in the output
+            result = {}
+            
+            import re
+            
+            if urls:
+                # Try to extract URLs and file paths from the output
+                for url in urls:
+                    url_result = {
+                        "success": "Saved to" in stdout,
+                        "raw_output": stdout
+                    }
+                    
+                    # Extract file paths from stdout
+                    html_pattern = re.compile(r"Saved to (\S+\.html)")
+                    md_pattern = re.compile(r"Saved to (\S+\.m)")
+                    
+                    html_matches = html_pattern.findall(stdout)
+                    md_matches = md_pattern.findall(stdout)
+                    
+                    if html_matches:
+                        url_result["html"] = html_matches[0]
+                    if md_matches:
+                        # Add the "d" back to the ".m..." extension
+                        url_result["markdown"] = md_matches[0] + "d"
+                    
+                    # If no matches found but output directory exists, check for files
+                    if not html_matches and not md_matches and output_dir and os.path.exists(output_dir):
+                        from pathik.crawler import _find_files_for_url
+                        html_file, md_file = _find_files_for_url(output_dir, url)
+                        if html_file:
+                            url_result["html"] = html_file
+                        if md_file:
+                            url_result["markdown"] = md_file
+                    
+                    result[url] = url_result
+            
+            # Include the raw output as an internal value
+            if session_id:
+                result["session_id"] = session_id
+                
+            return result
     
     finally:
         # Clean up temporary directory if we created one

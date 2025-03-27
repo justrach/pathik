@@ -95,24 +95,41 @@ This ensures you always have the correct binary version with all the latest feat
 
 ```python
 import pathik
+from pathik.crawler import CrawlerError
 
-# Crawl a single URL
-result = pathik.crawl("https://example.com")
-print(f"HTML saved to: {result['https://example.com']['html']}")
-print(f"Markdown saved to: {result['https://example.com']['markdown']}")
-
-# Crawl multiple URLs in parallel
-results = pathik.crawl([
-    "https://example.com",
-    "https://httpbin.org/html",
-    "https://jsonplaceholder.typicode.com"
-])
-
-# To disable parallel crawling
-results = pathik.crawl(urls, parallel=False)
-
-# To specify output directory
-results = pathik.crawl(urls, output_dir="./output")
+try:
+    # Crawl a single URL with named parameters
+    result = pathik.crawl(urls="https://example.com")
+    
+    # Check result
+    if "https://example.com" in result:
+        url_result = result["https://example.com"]
+        if url_result.get("success", False):
+            print(f"HTML saved to: {url_result.get('html')}")
+            print(f"Markdown saved to: {url_result.get('markdown')}")
+        else:
+            print(f"Error: {url_result.get('error')}")
+    
+    # Crawl multiple URLs in parallel
+    results = pathik.crawl(
+        urls=["https://example.com", "https://httpbin.org/html"],
+        parallel=True  # This is the default
+    )
+    
+    # To disable parallel crawling
+    results = pathik.crawl(
+        urls=["https://example.com", "https://httpbin.org/html"],
+        parallel=False
+    )
+    
+    # To specify output directory
+    results = pathik.crawl(
+        urls="https://example.com",
+        output_dir="./output"
+    )
+    
+except CrawlerError as e:
+    print(f"Crawler error: {e}")
 ```
 
 #### R2 Upload
@@ -120,21 +137,32 @@ results = pathik.crawl(urls, output_dir="./output")
 ```python
 import pathik
 import uuid
+from pathik.crawler import CrawlerError
 
-# Generate a UUID or use your own
-my_uuid = str(uuid.uuid4())
-
-# Crawl and upload to R2
-results = pathik.crawl_to_r2("https://example.com", uuid_str=my_uuid)
-print(f"UUID: {results['https://example.com']['uuid']}")
-print(f"R2 HTML key: {results['https://example.com']['r2_html_key']}")
-print(f"R2 Markdown key: {results['https://example.com']['r2_markdown_key']}")
-
-# Upload multiple URLs
-results = pathik.crawl_to_r2([
-    "https://example.com",
-    "https://httpbin.org/html"
-], uuid_str=my_uuid)
+try:
+    # Generate a UUID or use your own
+    my_uuid = str(uuid.uuid4())
+    
+    # Crawl and upload to R2
+    results = pathik.crawl_to_r2(
+        urls="https://example.com",
+        uuid_str=my_uuid
+    )
+    
+    if "https://example.com" in results:
+        r2_result = results["https://example.com"]
+        print(f"UUID: {r2_result.get('uuid')}")
+        print(f"R2 HTML key: {r2_result.get('r2_html_key')}")
+        print(f"R2 Markdown key: {r2_result.get('r2_markdown_key')}")
+    
+    # Upload multiple URLs
+    results = pathik.crawl_to_r2(
+        urls=["https://example.com", "https://httpbin.org/html"],
+        uuid_str=my_uuid
+    )
+    
+except CrawlerError as e:
+    print(f"Crawler error: {e}")
 ```
 
 #### Secure Kafka Streaming with Buffer Customization
@@ -142,31 +170,42 @@ results = pathik.crawl_to_r2([
 ```python
 import pathik
 import uuid
+from pathik.crawler import CrawlerError
 
-# Generate a session ID for tracking
-session_id = str(uuid.uuid4())
-
-# Stream a single URL to Kafka
-result = pathik.stream_to_kafka("https://example.com", session=session_id)
-print(f"Success: {result['https://example.com']['success']}")
-
-# Stream multiple URLs with custom options
-results = pathik.stream_to_kafka(
-    urls=["https://example.com", "https://httpbin.org/html"],
-    content_type="html",              # Options: "html", "markdown", or "both"
-    topic="custom_topic",             # Optional custom topic
-    session=session_id,               # Optional session ID
-    parallel=True,                    # Process URLs in parallel (default)
-    max_message_size=15728640,        # 15MB message size limit
-    buffer_memory=157286400           # 150MB buffer memory
-)
-
-# Check results
-for url, status in results.items():
-    if status["success"]:
-        print(f"Successfully streamed {url}")
-    else:
-        print(f"Failed to stream {url}: {status.get('error')}")
+try:
+    # Generate a session ID for tracking
+    session_id = str(uuid.uuid4())
+    
+    # Stream a single URL to Kafka
+    result = pathik.stream_to_kafka(
+        urls="https://example.com",
+        session=session_id
+    )
+    
+    if "https://example.com" in result:
+        if result["https://example.com"].get("success", False):
+            print(f"Successfully streamed")
+    
+    # Stream multiple URLs with custom options
+    results = pathik.stream_to_kafka(
+        urls=["https://example.com", "https://httpbin.org/html"],
+        content_type="html",              # Options: "html", "markdown", or "both"
+        topic="custom_topic",             # Optional custom topic
+        session=session_id,               # Optional session ID
+        parallel=True,                    # Process URLs in parallel (default)
+        max_message_size=15728640,        # 15MB message size limit
+        buffer_memory=157286400           # 150MB buffer memory
+    )
+    
+    # Check results
+    for url, status in results.items():
+        if status.get("success", False):
+            print(f"Successfully streamed {url}")
+        else:
+            print(f"Failed to stream {url}: {status.get('error')}")
+            
+except CrawlerError as e:
+    print(f"Crawler error: {e}")
 ```
 
 ### Command Line

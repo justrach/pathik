@@ -435,9 +435,10 @@ def crawl(urls: List[str], output_dir: Optional[str] = None, parallel: bool = Tr
     
     # Process URLs based on parallel flag
     if parallel and len(urls) > 1:
-        # Use parallel processing with -parallel flag
+        # FIXED: Use parallel processing with proper flag order
         try:
-            command = [binary_path, "-crawl", "-parallel", "-outdir", output_dir] + urls
+            # Place flags BEFORE -crawl, then add URLs
+            command = [binary_path, "-parallel", "-outdir", output_dir, "-crawl"] + urls
             print(f"Running parallel command: {' '.join(command)}")
             
             process = subprocess.run(
@@ -474,7 +475,8 @@ def crawl(urls: List[str], output_dir: Optional[str] = None, parallel: bool = Tr
     if not parallel or len(urls) == 1:
         for url in urls:
             try:
-                command = [binary_path, "-crawl", "-outdir", output_dir, url]
+                # FIXED: Place flags BEFORE -crawl, then add URL
+                command = [binary_path, "-outdir", output_dir, "-crawl", url]
                 print(f"Running command: {' '.join(command)}")
                 
                 process = subprocess.run(
@@ -616,9 +618,11 @@ def stream_to_kafka(
         # Get the binary path
         binary_path = get_binary_path()
         
-        # Prepare the command
-        command = [binary_path, "-crawl"]
-        command.extend(urls)
+        # FIXED: Prepare the command with correct order
+        # binary [options] -crawl URLs
+        command = [binary_path]
+        
+        # Add all flags BEFORE -crawl
         command.extend(["-outdir", temp_dir])
         command.append("-kafka")
         
@@ -637,6 +641,12 @@ def stream_to_kafka(
         # Add session ID if provided
         if session:
             command.extend(["-session", session])
+            
+        # Add -crawl flag AFTER options
+        command.append("-crawl")
+        
+        # Add URLs AFTER -crawl
+        command.extend(urls)
         
         # Run the command
         try:

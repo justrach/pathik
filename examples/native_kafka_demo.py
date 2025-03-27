@@ -9,14 +9,14 @@ import os
 import sys
 import uuid
 import argparse
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 # Add the parent directory to the path to ensure we can import pathik
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-import pathik
+from pathik import stream_to_kafka
 
 def stream_urls_to_kafka(
     urls: List[str], 
@@ -24,7 +24,7 @@ def stream_urls_to_kafka(
     kafka_topic: str = "pathik_crawl_data", 
     content_type: str = "both",
     session_id: Optional[str] = None
-) -> None:
+) -> Dict[str, Any]:
     """
     Stream a list of URLs to Kafka using pathik's native streaming functionality.
     
@@ -34,6 +34,9 @@ def stream_urls_to_kafka(
         kafka_topic: Kafka topic to stream to
         content_type: Type of content to stream ('html', 'markdown', or 'both')
         session_id: Optional session ID (generated if not provided)
+        
+    Returns:
+        Dictionary with streaming results
     """
     # Set environment variables for Kafka configuration
     os.environ["KAFKA_BROKERS"] = kafka_brokers
@@ -51,13 +54,28 @@ def stream_urls_to_kafka(
     print("="*50)
     
     # Stream URLs to Kafka using pathik's built-in functionality
-    results = pathik.stream_to_kafka(
+    results = stream_to_kafka(
         urls=urls,
         content_type=content_type,
+        topic=kafka_topic,
         session=session_id,
         parallel=True
     )
     
+    # Return results 
+    return results
+
+def print_results(results: Dict[str, Any]) -> None:
+    """
+    Print formatted results of the Kafka streaming operation.
+    
+    Args:
+        results: Results dictionary from stream_to_kafka
+    """
+    if not results:
+        print("No results returned")
+        return
+        
     # Print results
     print("\nStreaming Results:")
     print("="*50)
@@ -72,8 +90,10 @@ def stream_urls_to_kafka(
             if "details" in result:
                 details = result["details"]
                 print(f"  Topic: {details.get('topic')}")
-                print(f"  HTML Content: {os.path.basename(details.get('html_file', 'N/A'))}")
-                print(f"  Markdown Content: {os.path.basename(details.get('markdown_file', 'N/A'))}")
+                html_file = details.get('html_file', 'N/A')
+                md_file = details.get('markdown_file', 'N/A')
+                print(f"  HTML Content: {os.path.basename(html_file) if html_file != 'N/A' else 'N/A'}")
+                print(f"  Markdown Content: {os.path.basename(md_file) if md_file != 'N/A' else 'N/A'}")
         else:
             failed += 1
             print(f"{status} - {url}")
@@ -81,11 +101,26 @@ def stream_urls_to_kafka(
                 print(f"  Error: {result['error']}")
     
     print("\nSummary:")
-    print(f"Successfully streamed: {successful}/{len(urls)}")
-    print(f"Failed to stream: {failed}/{len(urls)}")
+    print(f"Successfully streamed: {successful}/{len(results)}")
+    print(f"Failed to stream: {failed}/{len(results)}")
     
-    print("\nTo consume these messages from Kafka:")
-    print(f"  python examples/kafka_consumer.py --session={session_id}")
+    # Get session ID from the first successful result
+    session_id = None
+    for result in results.values():
+        if result.get("success", False) and "details" in result:
+            session_id = result["details"].get("session_id")
+            break
+    
+    # Or get it from the first result's details if available
+    if not session_id and len(results) > 0:
+        url = list(results.keys())[0]
+        result = results[url]
+        if "details" in result:
+            session_id = result["details"].get("session_id")
+    
+    if session_id:
+        print("\nTo consume these messages from Kafka:")
+        print(f"  python examples/kafka_consumer.py --session={session_id}")
 
 def main():
     # Set up argument parser
@@ -103,13 +138,16 @@ def main():
     url_list = [url.strip() for url in args.urls.split(",")]
     
     # Stream URLs to Kafka
-    stream_urls_to_kafka(
+    results = stream_urls_to_kafka(
         urls=url_list,
         kafka_brokers=args.brokers,
         kafka_topic=args.topic,
         content_type=args.content,
         session_id=args.session
     )
+    
+    # Print results
+    print_results(results)
 
 if __name__ == "__main__":
     main() 

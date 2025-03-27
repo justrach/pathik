@@ -14,10 +14,27 @@ import time
 import shutil
 
 # Set version
-__version__ = "0.2.26"
+__version__ = "0.3.0"  # Incremented version for command ordering fix
+
+# NOTE: Version 0.3.32 fixes a critical bug with command-line argument ordering.
+# Previously, flags were incorrectly placed after URLs, causing errors like:
+# "Invalid URL '-outdir': only HTTP and HTTPS schemes are allowed"
+# Now flags are correctly placed before the -crawl command.
 
 # Import the basic functions  
 from .cli import crawl
+
+# Import our type-safe API 
+try:
+    from .safe_api import safe_crawl
+    from .schema import CrawlParams, CrawlResult, PathikFileResult
+    print("Successfully imported type-safe API")
+except ImportError as e:
+    print(f"Type-safe API import failed: {e}")
+    # Define a fallback in case the import fails
+    def safe_crawl(*args, **kwargs):
+        """Fallback implementation that redirects to regular crawl"""
+        return crawl(*args, **kwargs)
 
 # Function to stream to Kafka - defined at module level
 def stream_to_kafka(
@@ -255,4 +272,23 @@ except ImportError as e:
     print(f"Error importing crawler functions: {e}")
 
 # Export the functions
-__all__ = ["crawl", "stream_to_kafka", "crawl_to_r2", "__version__"] 
+__all__ = [
+    "crawl", 
+    "stream_to_kafka", 
+    "crawl_to_r2", 
+    "__version__",
+    "safe_crawl",  # New type-safe API
+    "CrawlParams",
+    "CrawlResult",
+    "PathikFileResult"
+] 
+
+# Deprecation warning to encourage using the type-safe API
+import warnings
+
+warnings.warn(
+    "Consider using safe_crawl() instead of crawl() for better type safety and validation. "
+    "The safe_crawl() function provides input validation and structured error handling.",
+    DeprecationWarning,
+    stacklevel=2
+) 

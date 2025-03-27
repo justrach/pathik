@@ -1,8 +1,5 @@
 requests>=2.25.0
 tqdm>=4.50.0
 
-[all]
-kafka-python>=2.0.0
-
 [kafka]
 kafka-python>=2.0.0

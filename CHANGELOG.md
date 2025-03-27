@@ -2,7 +2,7 @@
 
 All notable changes to Pathik will be documented in this file.
 
-## [0.3.0] - 2025-03-28
+## [0.3.0] - 2023-10-27
 
 ### Added
 - Enhanced URL validation to prevent security vulnerabilities
@@ -11,12 +11,15 @@ All notable changes to Pathik will be documented in this file.
 - New `kafka_consumer_direct.py` script with better security
 - Configurable compression options (Gzip and Snappy support)
 - Added Snappy compression library installation instructions
+- New example scripts for Kafka streaming: `native_kafka_demo.py` and `safe_kafka_demo.py`
 
 ### Changed
 - Updated Kafka producer to use Gzip compression instead of Snappy by default
 - Improved input validation across all user-provided parameters
 - Enhanced session ID tracking for better multi-user support
 - Refactored code for better security and performance
+- Fixed command line flags to match Go binary expectations (-content instead of --content-type)
+- Correct ordering of arguments for Kafka flags
 
 ### Fixed
 - Fixed URL validation to properly handle invalid URLs
@@ -24,8 +27,9 @@ All notable changes to Pathik will be documented in this file.
 - Fixed UnsupportedCodecError by adding proper compression library support
 - Resolved buffer size issues when streaming large web pages
 - Fixed message encoding problems in Kafka consumer
+- Fixed binary command flag format issues in CLI module
 
-## [0.2.6] - 2025-03-27
+## [0.2.6] - 2023-10-26
 
 ### Added
 - Kafka streaming functionality
