@@ -49,8 +49,8 @@ func getRandomUserAgent() string {
 	return userAgents[rand.Intn(len(userAgents))]
 }
 
-// fetchPage retrieves HTML from a URL with retries and smart dynamic content handling
-func fetchPage(url string, proxy string) (string, error) {
+// FetchPage retrieves HTML from a URL with retries and smart dynamic content handling
+func FetchPage(url string, proxy string) (string, error) {
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		browser := rod.New()
 		if proxy != "" {
@@ -93,8 +93,8 @@ func fetchPage(url string, proxy string) (string, error) {
 	return "", fmt.Errorf("failed to fetch %s after %d attempts", url, maxRetries)
 }
 
-// extractHTMLContent extracts main content HTML using Readability
-func extractHTMLContent(htmlStr, urlStr string) (string, error) {
+// ExtractHTMLContent extracts main content HTML using Readability
+func ExtractHTMLContent(htmlStr, urlStr string) (string, error) {
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse URL %s: %v", urlStr, err)
@@ -106,8 +106,8 @@ func extractHTMLContent(htmlStr, urlStr string) (string, error) {
 	return article.Content, nil
 }
 
-// convertToMarkdown converts HTML content to Markdown
-func convertToMarkdown(htmlStr string) (string, error) {
+// ConvertToMarkdown converts HTML content to Markdown
+func ConvertToMarkdown(htmlStr string) (string, error) {
 	converter := md.NewConverter("", true, nil)
 	markdown, err := converter.ConvertString(htmlStr)
 	if err != nil {
@@ -177,7 +177,7 @@ func CrawlURL(url string, proxy string, sem chan struct{}, wg *sync.WaitGroup, o
 	}
 
 	// Fetch page content
-	html, err := fetchPage(url, proxy)
+	html, err := FetchPage(url, proxy)
 	if err != nil {
 		log.Printf("Error fetching %s: %v", url, err)
 		return err
@@ -191,14 +191,14 @@ func CrawlURL(url string, proxy string, sem chan struct{}, wg *sync.WaitGroup, o
 	}
 
 	// Extract main content
-	contentHTML, err := extractHTMLContent(html, url)
+	contentHTML, err := ExtractHTMLContent(html, url)
 	if err != nil {
 		log.Printf("Error extracting content from %s: %v", url, err)
 		return err
 	}
 
 	// Convert to Markdown
-	markdown, err := convertToMarkdown(contentHTML)
+	markdown, err := ConvertToMarkdown(contentHTML)
 	if err != nil {
 		log.Printf("Error converting %s to Markdown: %v", url, err)
 		return err
@@ -227,19 +227,4 @@ func CrawlURLs(urls []string, outputDir string) {
 
 	wg.Wait()
 	fmt.Println("Crawling complete!")
-}
-
-// Export fetchPage as FetchPage for use by other packages
-func FetchPage(url string, proxy string) (string, error) {
-	return fetchPage(url, proxy)
-}
-
-// Export extractHTMLContent as ExtractHTMLContent for use by other packages
-func ExtractHTMLContent(htmlStr, urlStr string) (string, error) {
-	return extractHTMLContent(htmlStr, urlStr)
-}
-
-// Export convertToMarkdown as ConvertToMarkdown for use by other packages
-func ConvertToMarkdown(htmlStr string) (string, error) {
-	return convertToMarkdown(htmlStr)
 }

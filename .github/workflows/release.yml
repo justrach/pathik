@@ -33,6 +33,16 @@ jobs:
       id: get_version
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
     
+    - name: Set up Go module
+      run: |
+        # Ensure the go.mod file is using pathik as module name
+        echo "module pathik" > go.mod
+        echo "" >> go.mod
+        echo "go 1.24.0" >> go.mod
+        
+        # Verify module setup
+        cat go.mod
+    
     - name: Build binaries for all platforms
       run: python build_binary.py --all
     

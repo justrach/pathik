@@ -45,38 +45,17 @@ def setup_go_environment():
         # Environment should already be set up by the workflow
         return os.environ['WORKING_DIR']
     
-    # For local development, we need to handle the module structure differently
+    # For local development, use the current directory
     current_dir = os.path.abspath(os.path.dirname(__file__))
+    print(f"Using local directory for build: {current_dir}")
     
-    # If GOPATH is not set, we'll use a temporary one
-    if 'GOPATH' not in os.environ:
-        gopath = os.path.join(os.path.expanduser("~"), "go")
-        os.environ['GOPATH'] = gopath
-        print(f"GOPATH not set, using: {gopath}")
-    else:
-        gopath = os.environ['GOPATH']
-        print(f"Using existing GOPATH: {gopath}")
+    # Create a simple go.mod file if it doesn't exist
+    go_mod_path = os.path.join(current_dir, "go.mod")
+    if not os.path.exists(go_mod_path):
+        print("Creating go.mod file")
+        with open(go_mod_path, "w") as f:
+            f.write("module pathik\n\ngo 1.24.0\n")
     
-    # Set up the module path for pathik
-    module_path = os.path.join(gopath, "src", "github.com", "justrach", "pathik")
-    
-    # If we're not at the expected location and this isn't a symlink, copy files
-    if current_dir != module_path and not os.path.islink(current_dir):
-        print(f"Setting up module structure at: {module_path}")
-        os.makedirs(os.path.dirname(module_path), exist_ok=True)
-        
-        # If the directory already exists but isn't a symlink to our directory,
-        # remove it so we can create a fresh copy
-        if os.path.exists(module_path) and not os.path.islink(module_path):
-            shutil.rmtree(module_path)
-            
-        # Copy current directory to module path
-        shutil.copytree(current_dir, module_path, symlinks=True)
-        
-        print(f"Copied project to: {module_path}")
-        return module_path
-    
-    # We're already in the right place
     return current_dir
 
 def build_binary(target_os=None, target_arch=None, working_dir=None):
