@@ -2,7 +2,7 @@
 
 All notable changes to Pathik will be documented in this file.
 
-## [Unreleased] - 2025-03-28
+## [0.3.0] - 2025-03-28
 
 ### Added
 - Enhanced URL validation to prevent security vulnerabilities
@@ -25,7 +25,7 @@ All notable changes to Pathik will be documented in this file.
 - Resolved buffer size issues when streaming large web pages
 - Fixed message encoding problems in Kafka consumer
 
-## [0.3.0] - 2025-03-27
+## [0.2.6] - 2025-03-27
 
 ### Added
 - Kafka streaming functionality
