@@ -13,11 +13,15 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Version is set during build
+var Version = "dev"
+
 func main() {
 	// Load .env file if it exists
 	godotenv.Load()
 
 	// Parse command-line arguments
+	versionFlag := flag.Bool("version", false, "Print version information")
 	crawlFlag := flag.Bool("crawl", false, "Crawl URLs without uploading")
 	parallelFlag := flag.Bool("parallel", true, "Use parallel crawling (default: true)")
 	uuidFlag := flag.String("uuid", "", "UUID to prefix filenames for uploads")
@@ -29,6 +33,12 @@ func main() {
 	topicFlag := flag.String("topic", "", "Kafka topic to stream to (overrides KAFKA_TOPIC environment variable)")
 	sessionFlag := flag.String("session", "", "Session ID to include with Kafka messages (for multi-user environments)")
 	flag.Parse()
+
+	// Print version if requested
+	if *versionFlag {
+		fmt.Printf("pathik version v%s\n", Version)
+		return
+	}
 
 	// Get URLs from remaining arguments
 	urls := flag.Args()

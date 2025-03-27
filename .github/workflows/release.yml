@@ -35,16 +35,29 @@ jobs:
     
     - name: Set up Go module
       run: |
-        # Ensure the go.mod file is using pathik as module name
+        # Change module name in go.mod while preserving dependencies
+        # First, save the original content excluding the module line
+        grep -v "^module " go.mod > go.mod.temp
+        
+        # Create new go.mod with pathik module and original dependencies
         echo "module pathik" > go.mod
-        echo "" >> go.mod
-        echo "go 1.24.0" >> go.mod
+        cat go.mod.temp >> go.mod
+        rm go.mod.temp
+        
+        # Run go mod tidy to ensure dependencies are set correctly
+        go mod tidy
         
         # Verify module setup
         cat go.mod
     
     - name: Build binaries for all platforms
-      run: python build_binary.py --all
+      run: |
+        # Set environment variable for use in build_binary.py
+        export PATHIK_VERSION="${VERSION}"
+        
+        # Note: The build script creates a simplified Windows binary
+        # to avoid cross-compilation issues with local imports
+        python build_binary.py --all
     
     - name: Check output structure
       run: |
