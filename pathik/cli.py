@@ -7,12 +7,27 @@ import sys
 import os
 import json
 import subprocess
-from . import crawl, crawl_to_r2
-from .crawler import get_binary_path
+
+# Fix the import to use direct import instead of relative
+import pathik
+from pathik.crawler import get_binary_path
 
 def main():
     """Main entry point for the CLI"""
-    parser = argparse.ArgumentParser(description="Pathik - A fast web crawler with Python integration")
+    parser = argparse.ArgumentParser(
+        description="Pathik - A fast web crawler with Python integration",
+        epilog="""
+Note: This Python CLI uses subcommands (crawl, r2, kafka, version) rather than flags.
+For example:
+  pathik kafka https://example.com
+  pathik crawl -o ./output https://example.com
+
+If you prefer flag-style syntax, use the Go binary directly:
+  ./pathik -kafka https://example.com
+  ./pathik -crawl -outdir ./output https://example.com
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
     
     # Crawl command
@@ -35,11 +50,25 @@ def main():
     kafka_parser.add_argument("-t", "--topic", help="Kafka topic to stream to")
     kafka_parser.add_argument("-c", "--content", choices=["html", "markdown", "both"], default="both",
                             help="Content type to stream (html, markdown, or both)")
+    kafka_parser.add_argument("--session", help="Session ID to include with messages (for multi-user environments)")
     
     # Version command
     version_parser = subparsers.add_parser("version", help="Print version information")
     
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
+    except SystemExit as e:
+        # Check if user might be using Go binary syntax with dashes
+        for i, arg in enumerate(sys.argv[1:]):
+            if arg.startswith('-') and not arg.startswith('--') and arg not in ['-o', '-s', '-u', '-b', '-t', '-c']:
+                print("\nError: It seems you're using Go binary syntax with the Python CLI.")
+                print("The Python CLI uses subcommands instead of flags:")
+                print("  ✅ Correct: pathik kafka https://example.com")
+                print("  ❌ Incorrect: pathik -kafka https://example.com")
+                print("\nAvailable subcommands: crawl, r2, kafka, version")
+                return 1
+        # If not caught by our check, let the original error propagate
+        return e.code
     
     if not args.command:
         parser.print_help()
@@ -47,7 +76,7 @@ def main():
     
     try:
         if args.command == "crawl":
-            result = crawl(
+            result = pathik.crawl(
                 urls=args.urls, 
                 output_dir=args.outdir, 
                 parallel=not args.sequential
@@ -72,7 +101,7 @@ def main():
                 print(f"\nResults saved to: {results_file}")
         
         elif args.command == "r2":
-            result = crawl_to_r2(
+            result = pathik.crawl_to_r2(
                 urls=args.urls,
                 uuid_str=args.uuid,
                 parallel=not args.sequential
@@ -101,11 +130,17 @@ def main():
                 if args.content and args.content != "both":
                     cmd.extend(["-content", args.content])
                 
+                # Add topic if specified
+                if args.topic:
+                    cmd.extend(["-topic", args.topic])
+                    
+                # Add session ID if provided
+                if args.session:
+                    cmd.extend(["-session", args.session])
+                
                 # Add Kafka-specific options if provided
                 if args.brokers:
                     os.environ["KAFKA_BROKERS"] = args.brokers
-                if args.topic:
-                    os.environ["KAFKA_TOPIC"] = args.topic
                 
                 # Add URLs
                 cmd.extend(args.urls)
@@ -126,8 +161,7 @@ def main():
                 return 1
         
         elif args.command == "version":
-            from . import __version__  # Importing here to avoid circular imports
-            print(f"Pathik v{__version__}")
+            print(f"Pathik v{pathik.__version__}")
             return 0
         
         return 0
