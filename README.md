@@ -140,28 +140,34 @@ results = pathik.crawl_to_r2([
 import pathik
 import uuid
 
-# Generate a session ID for tracking
+# Generate a session ID to track this batch of streams
 session_id = str(uuid.uuid4())
 
-# Stream a single URL to Kafka
-result = pathik.stream_to_kafka("https://example.com", session=session_id)
-print(f"Success: {result['https://example.com']['success']}")
+# URLs to crawl and stream
+urls = [
+    "https://www.wikipedia.org",
+    "https://www.github.com",
+    "https://news.ycombinator.com"
+]
 
-# Stream multiple URLs with custom options
+# Stream content to Kafka
 results = pathik.stream_to_kafka(
-    urls=["https://example.com", "https://httpbin.org/html"],
-    content_type="html",        # Options: "html", "markdown", or "both"
-    topic="custom_topic",       # Optional custom topic
-    session=session_id,         # Optional session ID
-    parallel=True               # Process URLs in parallel (default)
+    urls=urls,                   # URLs to crawl and stream
+    content_type="both",         # Stream both HTML and Markdown
+    session=session_id,          # Add session ID to messages
+    topic="pathik.crawl",        # Set Kafka topic
+    parallel=True                # Process URLs in parallel
 )
 
-# Check results
-for url, status in results.items():
-    if status["success"]:
-        print(f"Successfully streamed {url}")
+# Print results
+for url, result in results.items():
+    if result["success"]:
+        print(f"✅ Successfully streamed {url}")
     else:
-        print(f"Failed to stream {url}: {status.get('error')}")
+        print(f"❌ Failed to stream {url}: {result.get('error', 'Unknown error')}")
+
+# You can use this session ID to filter messages when consuming from Kafka
+print(f"Session ID for filtering: {session_id}")
 ```
 
 ### Command Line
@@ -205,6 +211,42 @@ pathik kafka -c html -t user1_data --session user123 https://example.com
 
 Pathik supports streaming crawled content directly to Kafka. This is useful for real-time processing pipelines.
 
+### Basic Usage
+
+```python
+import pathik
+import uuid
+
+# Generate a session ID to track this batch of streams
+session_id = str(uuid.uuid4())
+
+# URLs to crawl and stream
+urls = [
+    "https://www.wikipedia.org",
+    "https://www.github.com",
+    "https://news.ycombinator.com"
+]
+
+# Stream content to Kafka
+results = pathik.stream_to_kafka(
+    urls=urls,                   # URLs to crawl and stream
+    content_type="both",         # Stream both HTML and Markdown
+    session=session_id,          # Add session ID to messages
+    topic="pathik.crawl",        # Set Kafka topic
+    parallel=True                # Process URLs in parallel
+)
+
+# Print results
+for url, result in results.items():
+    if result["success"]:
+        print(f"✅ Successfully streamed {url}")
+    else:
+        print(f"❌ Failed to stream {url}: {result.get('error', 'Unknown error')}")
+
+# You can use this session ID to filter messages when consuming from Kafka
+print(f"Session ID for filtering: {session_id}")
+```
+
 ### Kafka Configuration
 
 Configure Kafka connection details in the `.env` file:
@@ -216,6 +258,24 @@ KAFKA_USERNAME=                     # Optional username for SASL authentication
 KAFKA_PASSWORD=                     # Optional password for SASL authentication
 KAFKA_CLIENT_ID=pathik-crawler      # Client ID for Kafka
 KAFKA_USE_TLS=false                 # Whether to use TLS
+```
+
+Alternatively, you can configure these settings in your code with the CLI-based approach:
+
+```python
+from pathik.cli import crawl
+
+results = crawl(
+    urls=["https://example.com"],
+    kafka=True,
+    kafka_brokers="localhost:9092",
+    kafka_topic="my.topic",
+    kafka_username="user",
+    kafka_password="pass",
+    kafka_client_id="pathik-client",
+    kafka_use_tls=True,
+    session_id="my-session-id"
+)
 ```
 
 ### Kafka Message Format

@@ -113,88 +113,94 @@ def crawl(urls: Union[str, List[str]],
         output_dir = temp_dir
     
     try:
-        # Prepare command arguments
-        args = []
+        # Get the binary path
+        binary_path = get_binary_path()
         
-        # URL arguments - these should always come before option flags
-        args.extend(urls)
+        # Prepare the command with proper order:
+        # binary -crawl URLs -options
+        command = [binary_path, "-crawl"]
         
-        # Basic crawl options
-        args.extend(["-o", output_dir])
+        # Add URLs
+        command.extend(urls)
+        
+        # Add output directory
+        command.extend(["-o", output_dir])
+        
+        # Add basic options
         if parallel:
-            args.append("-p")
+            command.append("-p")
         if selector:
-            args.extend(["-s", selector])
+            command.extend(["-s", selector])
         if selector_files:
-            args.append("-sf")
+            command.append("-sf")
         if num_workers != 4:
-            args.extend(["-w", str(num_workers)])
+            command.extend(["-w", str(num_workers)])
         if timeout != 60:
-            args.extend(["-t", str(timeout)])
+            command.extend(["-t", str(timeout)])
         if limit != 1000:
-            args.extend(["-l", str(limit)])
+            command.extend(["-l", str(limit)])
         if validate:
-            args.append("-v")
+            command.append("-v")
         if skip_tls:
-            args.append("-k")
+            command.append("-k")
         if delay > 0:
-            args.extend(["-d", str(delay)])
+            command.extend(["-d", str(delay)])
         if chrome_path:
-            args.extend(["-c", chrome_path])
+            command.extend(["-c", chrome_path])
         if hostname:
-            args.extend(["-h", hostname])
+            command.extend(["-h", hostname])
         
         # R2 options
         if r2:
-            args.append("-r2")
+            command.append("-r2")
             
             if r2_account_id:
-                args.extend(["--r2-account-id", r2_account_id])
+                command.extend(["--r2-account-id", r2_account_id])
             if r2_access_key_id:
-                args.extend(["--r2-access-key-id", r2_access_key_id])
+                command.extend(["--r2-access-key-id", r2_access_key_id])
             if r2_access_key_secret:
-                args.extend(["--r2-access-key-secret", r2_access_key_secret])
+                command.extend(["--r2-access-key-secret", r2_access_key_secret])
             if r2_bucket_name:
-                args.extend(["--r2-bucket-name", r2_bucket_name])
+                command.extend(["--r2-bucket-name", r2_bucket_name])
             if r2_public:
-                args.append("--r2-public")
+                command.append("--r2-public")
         
         # UUID option
         if generate_uuid:
-            args.append("-uuid")
+            command.append("-uuid")
         
         # Content type option
         if content_type:
-            args.extend(["--content-type", content_type])
+            command.extend(["--content-type", content_type])
         
         # Kafka options
         if kafka:
-            args.append("-kafka")
+            command.append("-kafka")
             
             if kafka_brokers:
-                args.extend(["--kafka-brokers", kafka_brokers])
+                command.extend(["--kafka-brokers", kafka_brokers])
             if kafka_topic:
-                args.extend(["--kafka-topic", kafka_topic])
+                command.extend(["--kafka-topic", kafka_topic])
             if kafka_username:
-                args.extend(["--kafka-username", kafka_username])
+                command.extend(["--kafka-username", kafka_username])
             if kafka_password:
-                args.extend(["--kafka-password", kafka_password])
+                command.extend(["--kafka-password", kafka_password])
             if kafka_client_id:
-                args.extend(["--kafka-client-id", kafka_client_id])
+                command.extend(["--kafka-client-id", kafka_client_id])
             if kafka_use_tls:
-                args.append("--kafka-use-tls")
+                command.append("--kafka-use-tls")
         
         # Session ID option
         if session_id:
-            args.extend(["--session-id", session_id])
+            command.extend(["--session-id", session_id])
 
         # Run the command
-        binary_path = get_binary_path()
-        result = _run_go_command(binary_path, args)
+        print(f"Running command: {' '.join(command)}")
+        stdout, stderr = _run_go_command(command)
         
         # Parse JSON result
         try:
-            crawl_result = json.loads(result)
+            crawl_result = json.loads(stdout)
             
             # Add session ID to result if it was generated
             if session_id and 'session_id' not in crawl_result:
@@ -203,7 +209,7 @@ def crawl(urls: Union[str, List[str]],
             return crawl_result
         except json.JSONDecodeError:
             # If JSON parsing fails, return raw result
-            return {"raw_output": result, "session_id": session_id if session_id else None}
+            return {"raw_output": stdout, "session_id": session_id if session_id else None}
     
     finally:
         # Clean up temporary directory if we created one

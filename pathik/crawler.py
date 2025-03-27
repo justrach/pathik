@@ -525,8 +525,13 @@ def crawl_to_r2(urls: List[str], uuid_str: Optional[str] = None, parallel: bool 
     
     # Prepare command
     command = ["-r2", f"-uuid={uuid_str}"]
+    
+    # Always include the crawl command
+    command.insert(0, "-crawl")
+    
     if not parallel:
         command.append("-parallel=false")
+    
     command.extend(urls)
     
     # Run the Go command
@@ -604,52 +609,56 @@ def stream_to_kafka(
     if content_type not in ["html", "markdown", "both"]:
         raise ValueError("Content type must be 'html', 'markdown', or 'both'")
     
-    # Prepare command
-    command = ["-kafka"]
+    # Create a temporary directory for output
+    temp_dir = tempfile.mkdtemp(prefix="pathik_kafka_")
     
-    # Add parallel flag if needed
-    if not parallel:
-        command.append("-parallel=false")
-    
-    # Add content type if not 'both'
-    if content_type != "both":
-        command.extend(["-content", content_type])
-    
-    # Add topic if specified
-    if topic:
-        command.extend(["-topic", topic])
-    
-    # Add session ID if provided
-    if session:
-        command.extend(["-session", session])
-    
-    # Add URLs
-    command.extend(urls)
-    
-    # Run the Go command
     try:
-        stdout, stderr = _run_go_command(command)
+        # Get the binary path
+        binary_path = get_binary_path()
         
-        # Parse output to get status
-        lines = stdout.splitlines()
-        result = {}
+        # Prepare the command
+        command = [binary_path, "-crawl"]
+        command.extend(urls)
+        command.extend(["-outdir", temp_dir])
+        command.append("-kafka")
         
-        # Extract results
-        for url in urls:
-            result[url] = {"success": True}
+        # Add parallel flag if needed
+        if not parallel:
+            command.append("-parallel=false")
+        
+        # Add content type if not 'both'
+        if content_type != "both":
+            command.extend(["-content", content_type])
+        
+        # Add topic if specified
+        if topic:
+            command.extend(["-topic", topic])
+        
+        # Add session ID if provided
+        if session:
+            command.extend(["-session", session])
+        
+        # Run the command
+        try:
+            print(f"Running command: {' '.join(command)}")
+            stdout, stderr = _run_go_command(command)
             
-            # Look for specific error messages for each URL
-            for line in lines:
-                if url in line and ("Error" in line or "Failed" in line):
-                    error_msg = line.split(":", 1)[1].strip() if ":" in line else line
-                    result[url] = {"success": False, "error": error_msg}
-                    break
-        
-        return result
-    
-    except Exception as e:
-        # Create an error result for each URL
-        return {url: {"success": False, "error": str(e)} for url in urls}
+            # Create a success result for each URL
+            result = {}
+            for url in urls:
+                result[url] = {"success": True}
+            
+            return result
+        except Exception as e:
+            print(f"Error in stream_to_kafka: {e}")
+            return {url: {"success": False, "error": str(e)} for url in urls}
+    finally:
+        # Clean up the temporary directory
+        try:
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+        except Exception as e:
+            print(f"Warning: Failed to clean up temp directory: {e}")
 
 
 def _find_files_for_url(directory: str, url: str) -> Tuple[str, str]:

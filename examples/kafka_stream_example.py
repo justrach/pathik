@@ -1,37 +1,45 @@
 #!/usr/bin/env python
 """
-Simple example demonstrating Pathik's Kafka streaming API
+Example demonstrating Pathik's Kafka streaming API
 """
-import pathik
+import sys
+import os
 import uuid
+
+# Ensure we're using the local pathik module
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+    
+# Now import pathik
+import pathik
 
 # URLs to crawl and stream
 urls = [
-    "https://example.com",
+    "https://www.wikipedia.org",
+    "https://www.github.com",
     "https://news.ycombinator.com"
 ]
 
-# Generate a session ID to track this batch of streams
+# Generate a session ID for this run
 session_id = str(uuid.uuid4())
 print(f"Session ID: {session_id}")
 
-# Stream the content to Kafka using Pathik API
+# Stream content to Kafka
 results = pathik.stream_to_kafka(
-    urls=urls,                   # URLs to crawl and stream
-    content_type="both",         # Stream both HTML and Markdown
-    session=session_id,          # Add session ID to messages
-    topic=None,                  # Use default topic from KAFKA_TOPIC env var
-    parallel=True                # Process URLs in parallel
+    urls=urls,
+    content_type="both",
+    session=session_id,
+    topic="pathik.crawl",
+    parallel=True
 )
 
 # Print results
-print("\nStreaming results:")
-for url, status in results.items():
-    if status["success"]:
-        print(f"✓ {url}: Successfully streamed to Kafka")
+for url, result in results.items():
+    if result["success"]:
+        print(f"✅ Successfully streamed {url}")
     else:
-        print(f"✗ {url}: Failed - {status.get('error', 'Unknown error')}")
+        print(f"❌ Failed to stream {url}: {result.get('error', 'Unknown error')}")
 
-print(f"\nTo consume these messages, filter by session ID: {session_id}")
-print("You can use any Kafka consumer, for example:")
-print(f"  python example_kafka.py consume -s {session_id}") 
+print("\nTo consume these messages, filter by the session ID:")
+print(f"  session_id = '{session_id}'") 
