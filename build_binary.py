@@ -7,6 +7,7 @@ import subprocess
 import sys
 import platform
 import argparse
+import shutil
 
 def detect_platform():
     """Detect the current platform more reliably"""
@@ -36,7 +37,49 @@ def detect_platform():
     print(f"Detected platform: {os_name}_{arch}")
     return os_name, arch
 
-def build_binary(target_os=None, target_arch=None):
+def setup_go_environment():
+    """Set up the proper Go module environment for building"""
+    # Check if we're in GitHub Actions
+    if 'GITHUB_WORKSPACE' in os.environ and 'WORKING_DIR' in os.environ:
+        print(f"Using GitHub Actions workspace: {os.environ['WORKING_DIR']}")
+        # Environment should already be set up by the workflow
+        return os.environ['WORKING_DIR']
+    
+    # For local development, we need to handle the module structure differently
+    current_dir = os.path.abspath(os.path.dirname(__file__))
+    
+    # If GOPATH is not set, we'll use a temporary one
+    if 'GOPATH' not in os.environ:
+        gopath = os.path.join(os.path.expanduser("~"), "go")
+        os.environ['GOPATH'] = gopath
+        print(f"GOPATH not set, using: {gopath}")
+    else:
+        gopath = os.environ['GOPATH']
+        print(f"Using existing GOPATH: {gopath}")
+    
+    # Set up the module path for pathik
+    module_path = os.path.join(gopath, "src", "github.com", "justrach", "pathik")
+    
+    # If we're not at the expected location and this isn't a symlink, copy files
+    if current_dir != module_path and not os.path.islink(current_dir):
+        print(f"Setting up module structure at: {module_path}")
+        os.makedirs(os.path.dirname(module_path), exist_ok=True)
+        
+        # If the directory already exists but isn't a symlink to our directory,
+        # remove it so we can create a fresh copy
+        if os.path.exists(module_path) and not os.path.islink(module_path):
+            shutil.rmtree(module_path)
+            
+        # Copy current directory to module path
+        shutil.copytree(current_dir, module_path, symlinks=True)
+        
+        print(f"Copied project to: {module_path}")
+        return module_path
+    
+    # We're already in the right place
+    return current_dir
+
+def build_binary(target_os=None, target_arch=None, working_dir=None):
     """Build the Go binary for the specified platform"""
     # Determine target platform
     if target_os is None or target_arch is None:
@@ -44,13 +87,16 @@ def build_binary(target_os=None, target_arch=None):
         target_os = target_os or current_os  
         target_arch = target_arch or current_arch
     
+    # Use provided working directory or current directory
+    working_dir = working_dir or os.getcwd()
+    
     # Determine the binary name based on platform
     binary_name = "pathik_bin"
     if target_os == "windows":
         binary_name += ".exe"
     
     # Setup output path - always use the bin directory for organization
-    output_path = f"pathik/bin/{target_os}_{target_arch}/{binary_name}"
+    output_path = os.path.join(working_dir, "pathik", "bin", f"{target_os}_{target_arch}", binary_name)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
     # Setup environment
@@ -61,8 +107,10 @@ def build_binary(target_os=None, target_arch=None):
     # Build the Go binary
     cmd = ["go", "build", "-o", output_path, "./main.go"]
     print(f"Building for {target_os}/{target_arch}: {' '.join(cmd)}")
+    print(f"Working directory: {working_dir}")
     
-    result = subprocess.run(cmd, capture_output=True, env=env)
+    # Run the build command from the working directory
+    result = subprocess.run(cmd, capture_output=True, env=env, cwd=working_dir)
     
     if result.returncode != 0:
         print(f"Error building Go binary: {result.stderr.decode()}")
@@ -73,10 +121,10 @@ def build_binary(target_os=None, target_arch=None):
     # For current platform, also copy to main directory for backward compatibility
     current_os, current_arch = detect_platform()
     if target_os == current_os and target_arch == current_arch:
-        os.makedirs("pathik", exist_ok=True)
-        main_binary_path = f"pathik/{binary_name}"
+        pathik_dir = os.path.join(working_dir, "pathik")
+        os.makedirs(pathik_dir, exist_ok=True)
+        main_binary_path = os.path.join(pathik_dir, binary_name)
         print(f"Copying binary to {main_binary_path} for current platform")
-        import shutil
         shutil.copy2(output_path, main_binary_path)
         
         # Make sure it's executable
@@ -85,7 +133,7 @@ def build_binary(target_os=None, target_arch=None):
             
     return True
 
-def build_all():
+def build_all(working_dir=None):
     """Build binaries for all supported platforms"""
     platforms = [
         ("darwin", "amd64"),  # Intel Mac
@@ -97,7 +145,7 @@ def build_all():
     
     success = True
     for target_os, target_arch in platforms:
-        if not build_binary(target_os, target_arch):
+        if not build_binary(target_os, target_arch, working_dir):
             print(f"Failed to build for {target_os}/{target_arch}")
             success = False
     
@@ -111,9 +159,13 @@ def main():
     
     args = parser.parse_args()
     
+    # Set up Go environment and get working directory
+    working_dir = setup_go_environment()
+    print(f"Building from: {working_dir}")
+    
     if args.all:
         print("Building for all supported platforms...")
-        if build_all():
+        if build_all(working_dir):
             print("All binaries built successfully.")
             print("You can now install the Python package with:")
             print("  pip install -e .")
@@ -121,7 +173,7 @@ def main():
             print("Some binaries failed to build.")
             sys.exit(1)
     else:
-        if build_binary(args.os, args.arch):
+        if build_binary(args.os, args.arch, working_dir):
             print("Binary built successfully.")
             print("You can now install the Python package with:")
             print("  pip install -e .")

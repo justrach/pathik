@@ -1,4 +1,4 @@
-module pathik
+module github.com/justrach/pathik
 
 go 1.24.0
 

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"pathik/crawler"
-	"pathik/storage"
+	"github.com/justrach/pathik/crawler"
+	"github.com/justrach/pathik/storage"
 
 	"github.com/joho/godotenv"
 )
