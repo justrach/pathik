@@ -13,9 +13,12 @@ A high-performance web crawler implemented in Go with Python and JavaScript bind
 - Markdown conversion
 - Parallel URL processing
 - Cloudflare R2 integration
-- Kafka streaming support
+- Kafka streaming support with configurable buffer sizes
+- Enhanced security with URL and IP validation
 - Memory-efficient (uses ~10x less memory than browser automation tools)
 - Automatic binary version management
+- Customizable compression options (Gzip and Snappy support)
+- Session-based message tracking for multi-user environments
 
 ## Performance Benchmarks
 
@@ -134,7 +137,7 @@ results = pathik.crawl_to_r2([
 ], uuid_str=my_uuid)
 ```
 
-#### Kafka Streaming
+#### Secure Kafka Streaming with Buffer Customization
 
 ```python
 import pathik
@@ -150,10 +153,12 @@ print(f"Success: {result['https://example.com']['success']}")
 # Stream multiple URLs with custom options
 results = pathik.stream_to_kafka(
     urls=["https://example.com", "https://httpbin.org/html"],
-    content_type="html",        # Options: "html", "markdown", or "both"
-    topic="custom_topic",       # Optional custom topic
-    session=session_id,         # Optional session ID
-    parallel=True               # Process URLs in parallel (default)
+    content_type="html",              # Options: "html", "markdown", or "both"
+    topic="custom_topic",             # Optional custom topic
+    session=session_id,               # Optional session ID
+    parallel=True,                    # Process URLs in parallel (default)
+    max_message_size=15728640,        # 15MB message size limit
+    buffer_memory=157286400           # 150MB buffer memory
 )
 
 # Check results
@@ -197,8 +202,11 @@ pathik kafka -t user1_crawl_data https://example.com
 # Add a session ID for multi-user environments
 pathik kafka --session user123 https://example.com
 
+# Set custom buffer sizes
+pathik kafka --max-message-size 15728640 --buffer-memory 157286400 https://example.com
+
 # Combine options
-pathik kafka -c html -t user1_data --session user123 https://example.com
+pathik kafka -c html -t user1_data --session user123 --max-message-size 15728640 https://example.com
 ```
 
 ## Kafka Streaming
@@ -207,7 +215,7 @@ Pathik supports streaming crawled content directly to Kafka. This is useful for 
 
 ### Kafka Configuration
 
-Configure Kafka connection details in the `.env` file:
+Configure Kafka connection details using environment variables or `.env` file:
 
 ```
 KAFKA_BROKERS=localhost:9092        # Comma-separated list of brokers
@@ -216,7 +224,45 @@ KAFKA_USERNAME=                     # Optional username for SASL authentication
 KAFKA_PASSWORD=                     # Optional password for SASL authentication
 KAFKA_CLIENT_ID=pathik-crawler      # Client ID for Kafka
 KAFKA_USE_TLS=false                 # Whether to use TLS
+KAFKA_MAX_MESSAGE_SIZE=10485760     # 10MB max message size (default)
+KAFKA_BUFFER_MEMORY=104857600       # 100MB buffer memory (default)
+KAFKA_MAX_REQUEST_SIZE=20971520     # 20MB max request size (default)
 ```
+
+### Buffer Size Customization
+
+You can customize Kafka producer and consumer buffer sizes for handling large content:
+
+```python
+# Custom buffer sizes for producer
+pathik.stream_to_kafka(
+    "https://example.com",
+    max_message_size=15728640,    # 15MB max message size (default: 10MB)
+    buffer_memory=157286400       # 150MB buffer memory (default: 100MB)
+)
+
+# For consuming large messages
+python kafka_consumer_direct.py --session=YOUR_SESSION_ID --max-bytes=20971520 --max-partition-bytes=10485760
+```
+
+For debugging or handling large web pages, you may need to increase these buffer sizes to prevent message size errors.
+
+### Optional Kafka Dependencies
+
+To use Kafka streaming, install the required dependencies:
+
+```bash
+# Install pathik with Kafka support
+pip install "pathik[kafka]"
+
+# Or install the dependency separately
+pip install kafka-python
+
+# For Snappy compression support (recommended)
+pip install python-snappy
+```
+
+If Kafka dependencies are not available, Pathik will use a fallback simulation mode that logs the messages locally without actually sending them to Kafka.
 
 ### Kafka Message Format
 
@@ -229,7 +275,7 @@ When streaming to Kafka, Pathik sends two messages per URL:
      - url: The original URL
      - contentType: "text/html"
      - timestamp: ISO 8601 timestamp
-     - session: Session ID (if provided)
+     - sessionID: Session ID (if provided)
 
 2. Markdown Content:
    - Key: URL
@@ -238,100 +284,36 @@ When streaming to Kafka, Pathik sends two messages per URL:
      - url: The original URL
      - contentType: "text/markdown"
      - timestamp: ISO 8601 timestamp
-     - session: Session ID (if provided)
+     - sessionID: Session ID (if provided)
 
-### Kafka Consumer Examples
+## Security Enhancements
 
-Pathik includes example consumers for Go, Python, and JavaScript in the `examples` directory.
+Pathik includes several security features to ensure safe and reliable crawling:
 
-#### Python Consumer Example
+### URL Validation
 
-```python
-from kafka import KafkaConsumer
-import json
+URLs are validated to prevent security issues:
+- Only HTTP and HTTPS schemes are allowed
+- Private IP addresses and localhost access are restricted
+- Hostnames are resolved and checked against private IP ranges
 
-# Connect to Kafka
-consumer = KafkaConsumer(
-    'pathik_crawl_data',                  # Topic
-    bootstrap_servers=['localhost:9092'],
-    auto_offset_reset='earliest',         # Start from beginning
-    enable_auto_commit=True,
-    group_id='pathik-consumer-group'
-)
+### Input Sanitization
 
-# Optional: filter by session ID
-session_filter = "user123"  # Set to None to receive all messages
+All inputs (file paths, session IDs, etc.) are sanitized to prevent injection attacks:
+- File paths are checked for directory traversal attempts
+- Session IDs are validated against a safe pattern (alphanumeric and some special chars)
+- Topic names and other parameters are validated for safe characters
 
-# Process messages
-for message in consumer:
-    # Extract headers
-    headers = {k: v.decode('utf-8') for k, v in message.headers}
-    
-    # Filter by session if needed
-    if session_filter and headers.get('session') != session_filter:
-        continue
-        
-    # Get message details
-    url = message.key.decode('utf-8')
-    content_type = headers.get('contentType')
-    
-    print(f"Received from {url}: {content_type} content ({len(message.value)} bytes)")
-    
-    # Process content based on type
-    if content_type == 'text/html':
-        # Process HTML...
-        pass
-    elif content_type == 'text/markdown':
-        # Process Markdown...
-        pass
-```
+### Rate Limiting
 
-## Using in Docker
+Built-in rate limiting prevents accidentally overloading target servers:
+- Default rate limit of 1 request per second with configurable burst
+- Automatic retries with exponential backoff
+- Delay between retries is configurable
 
-When using Pathik in a Docker container, you need to install the required dependencies for Chromium:
+### Error Handling
 
-```dockerfile
-FROM python:3.10-slim
-
-# Install Chromium dependencies
-RUN apt-get update && apt-get install -y \
-    libglib2.0-0 \
-    libgtk-3-0 \
-    libx11-6 \
-    libxcomposite1 \
-    libxcursor1 \
-    libxdamage1 \
-    libxi6 \
-    libxtst6 \
-    libnss3 \
-    libcups2 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libgdk-pixbuf2.0-0 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libdrm2 \
-    libgbm1 \
-    libasound2 \
-    fonts-freefont-ttf
-
-# Install pathik
-RUN pip install pathik
-```
-
-## Development
-
-### Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/justrach/pathik.git
-cd pathik
-
-# Create a virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install in development mode
-pip install -e .
-```
+Robust error handling ensures graceful failure:
+- Detailed error messages for troubleshooting
+- Automatic retries for transient failures
+- Graceful shutdown with proper cleanup

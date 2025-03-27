@@ -100,11 +100,16 @@ func CreateKafkaWriter(config KafkaConfig) (*kafka.Writer, error) {
 		}
 	}
 
-	// Create the writer
+	// Create the writer with custom buffer configurations
 	writer := &kafka.Writer{
-		Addr:     kafka.TCP(config.Brokers...),
-		Topic:    config.Topic,
-		Balancer: &kafka.LeastBytes{},
+		Addr:         kafka.TCP(config.Brokers...),
+		Topic:        config.Topic,
+		Balancer:     &kafka.LeastBytes{},
+		MaxAttempts:  config.MaxRetry,
+		BatchSize:    1,                    // Default to sending immediately
+		BatchTimeout: 1 * time.Millisecond, // Almost no delay
+		RequiredAcks: kafka.RequireAll,     // Wait for all replicas
+		Compression:  kafka.Gzip,           // Use Gzip instead of Snappy compression
 		Transport: &kafka.Transport{
 			SASL: dialer.SASLMechanism,
 			TLS:  dialer.TLS,

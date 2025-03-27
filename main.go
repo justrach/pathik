@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -15,6 +17,74 @@ import (
 
 // Version is set during build
 var Version = "dev"
+
+// validateURL validates that a URL is properly formatted and safe
+func validateURL(url string) error {
+	return crawler.ValidateURL(url)
+}
+
+// validateOutputDir ensures the output directory is safe
+func validateOutputDir(dir string) error {
+	// Check for directory traversal
+	if strings.Contains(dir, "..") {
+		return fmt.Errorf("directory traversal attempt detected: %s", dir)
+	}
+
+	// Convert to absolute path
+	absPath, err := filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("invalid directory path: %v", err)
+	}
+
+	// Check if directory exists or create it
+	fi, err := os.Stat(absPath)
+	if os.IsNotExist(err) {
+		// Try to create the directory
+		err = os.MkdirAll(absPath, 0755)
+		if err != nil {
+			return fmt.Errorf("failed to create directory: %v", err)
+		}
+		return nil
+	}
+
+	// Check if it's a directory
+	if err == nil && !fi.IsDir() {
+		return fmt.Errorf("path exists but is not a directory: %s", absPath)
+	}
+
+	// Check write permissions by attempting to create and remove a temp file
+	testFile := filepath.Join(absPath, ".pathik_test")
+	f, err := os.Create(testFile)
+	if err != nil {
+		return fmt.Errorf("directory is not writable: %v", err)
+	}
+	f.Close()
+	os.Remove(testFile)
+
+	return nil
+}
+
+// validateSessionID validates the session ID format
+func validateSessionID(session string) error {
+	if session == "" {
+		return nil
+	}
+
+	// Only allow alphanumeric and some special characters
+	for _, c := range session {
+		if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') &&
+			c != '-' && c != '_' && c != '.' {
+			return fmt.Errorf("invalid session ID format, only alphanumeric chars, dash, underscore and dot allowed")
+		}
+	}
+
+	// Check length
+	if len(session) > 64 {
+		return fmt.Errorf("session ID too long (max 64 characters)")
+	}
+
+	return nil
+}
 
 func main() {
 	// Load .env file if it exists
@@ -40,10 +110,43 @@ func main() {
 		return
 	}
 
+	// Validate session ID
+	if *sessionFlag != "" {
+		if err := validateSessionID(*sessionFlag); err != nil {
+			log.Fatalf("Invalid session ID: %v", err)
+		}
+	}
+
+	// Validate output directory
+	if *outDirFlag != "." {
+		if err := validateOutputDir(*outDirFlag); err != nil {
+			log.Fatalf("Invalid output directory: %v", err)
+		}
+	}
+
+	// Validate directory for uploads
+	if *dirFlag != "." {
+		if err := validateOutputDir(*dirFlag); err != nil {
+			log.Fatalf("Invalid directory: %v", err)
+		}
+	}
+
 	// Get URLs from remaining arguments
 	urls := flag.Args()
 	if len(urls) == 0 {
 		log.Fatal("No URLs provided")
+	}
+
+	// Validate all URLs
+	for _, url := range urls {
+		if err := validateURL(url); err != nil {
+			log.Fatalf("Invalid URL '%s': %v", url, err)
+		}
+	}
+
+	// Validate content type
+	if *contentTypeFlag != "both" && *contentTypeFlag != "html" && *contentTypeFlag != "markdown" {
+		log.Fatalf("Invalid content type: %s (must be 'html', 'markdown', or 'both')", *contentTypeFlag)
 	}
 
 	// Kafka mode - crawl and stream to Kafka
@@ -75,6 +178,14 @@ func main() {
 	// If R2 upload is requested, UUID is required
 	if *useR2Flag && *uuidFlag == "" {
 		log.Fatal("UUID is required for R2 upload mode (-uuid flag)")
+	}
+
+	// Validate UUID format
+	if *useR2Flag && *uuidFlag != "" {
+		// Basic UUID validation
+		if len(*uuidFlag) > 64 || strings.Contains(*uuidFlag, "/") || strings.Contains(*uuidFlag, "..") {
+			log.Fatal("Invalid UUID format")
+		}
 	}
 
 	// If R2 upload is requested, do the upload

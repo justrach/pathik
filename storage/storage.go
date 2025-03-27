@@ -80,20 +80,40 @@ func SanitizeURL(urlStr string) string {
 	// Parse the URL
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
-		// If parsing fails, just replace unsafe characters
-		return strings.ReplaceAll(urlStr, "/", "_")
+		// If parsing fails, sanitize the string more aggressively
+		sanitized := strings.ReplaceAll(urlStr, "/", "_")
+		sanitized = strings.ReplaceAll(sanitized, "\\", "_")
+		sanitized = strings.ReplaceAll(sanitized, ":", "_")
+		sanitized = strings.ReplaceAll(sanitized, "*", "_")
+		sanitized = strings.ReplaceAll(sanitized, "?", "_")
+		sanitized = strings.ReplaceAll(sanitized, "\"", "_")
+		sanitized = strings.ReplaceAll(sanitized, "<", "_")
+		sanitized = strings.ReplaceAll(sanitized, ">", "_")
+		sanitized = strings.ReplaceAll(sanitized, "|", "_")
+		return sanitized
 	}
 
 	// Combine host and path
-	result := parsedURL.Host + parsedURL.Path
+	result := parsedURL.Host
+	if parsedURL.Path != "" && parsedURL.Path != "/" {
+		// Add path but remove leading/trailing slashes
+		path := strings.Trim(parsedURL.Path, "/")
+		result += "_" + path
+	}
 
-	// Remove protocol, query parameters, and fragments
-	result = strings.ReplaceAll(result, ":", "_")
-	result = strings.ReplaceAll(result, "/", "_")
-	result = strings.ReplaceAll(result, "?", "_")
-	result = strings.ReplaceAll(result, "&", "_")
-	result = strings.ReplaceAll(result, "=", "_")
-	result = strings.ReplaceAll(result, "#", "_")
+	// Remove unsafe characters
+	unsafe := []string{":", "/", "\\", "?", "*", "\"", "<", ">", "|", " ", "\t", "\n", "\r", "&", "=", "+", "$", ",", ";", "^", "`", "{", "}", "[", "]", "(", ")", "#", "%"}
+	for _, char := range unsafe {
+		result = strings.ReplaceAll(result, char, "_")
+	}
+
+	// Ensure no directory traversal is possible
+	result = strings.ReplaceAll(result, "..", "_")
+
+	// Truncate if too long (max 200 chars for filename safety)
+	if len(result) > 200 {
+		result = result[:200]
+	}
 
 	return result
 }
@@ -183,20 +203,61 @@ func GetDomainNameForFile(pageURL string) string {
 
 // SaveToLocalFile saves content to a file with the appropriate extension
 func SaveToLocalFile(content, url, fileType, outputDir string) (string, error) {
+	// Check for directory traversal attempts
+	if strings.Contains(outputDir, "..") {
+		return "", fmt.Errorf("directory traversal attempt detected")
+	}
+
+	// Limit content size to prevent denial of service
+	maxContentSize := 10 * 1024 * 1024 // 10 MB
+	if len(content) > maxContentSize {
+		content = content[:maxContentSize]
+		log.Printf("Warning: Content for URL %s truncated to %d bytes", url, maxContentSize)
+	}
+
 	domain := GetDomainNameForFile(url)
 	date := time.Now().Format("2006-01-02")
-	filename := fmt.Sprintf("%s_%s.%s", domain, date, fileType)
+
+	// Ensure safe file type
+	safeFileType := fileType
+	if fileType != "html" && fileType != "md" {
+		safeFileType = "txt" // Default to txt if type is unexpected
+	}
+
+	filename := fmt.Sprintf("%s_%s.%s", domain, date, safeFileType)
 
 	// Use the specified output directory or current directory
 	if outputDir != "" && outputDir != "." {
-		// Create the directory if it doesn't exist
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
-			return "", fmt.Errorf("failed to create directory %s: %v", outputDir, err)
+		// Validate output directory path
+		absOutputDir, err := filepath.Abs(outputDir)
+		if err != nil {
+			return "", fmt.Errorf("invalid output directory path: %v", err)
 		}
-		filename = filepath.Join(outputDir, filename)
+
+		// Create the directory if it doesn't exist
+		if err := os.MkdirAll(absOutputDir, 0755); err != nil {
+			return "", fmt.Errorf("failed to create directory %s: %v", absOutputDir, err)
+		}
+
+		filename = filepath.Join(absOutputDir, filename)
 	}
 
-	err := ioutil.WriteFile(filename, []byte(content), 0644)
+	// Ensure the final path doesn't go outside the intended directory
+	absFilename, err := filepath.Abs(filename)
+	if err != nil {
+		return "", fmt.Errorf("invalid file path: %v", err)
+	}
+
+	absOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return "", fmt.Errorf("invalid output directory path: %v", err)
+	}
+
+	if !strings.HasPrefix(absFilename, absOutputDir) {
+		return "", fmt.Errorf("path traversal attempt detected")
+	}
+
+	err = ioutil.WriteFile(filename, []byte(content), 0644)
 	if err != nil {
 		return "", fmt.Errorf("failed to save file %s: %v", filename, err)
 	}

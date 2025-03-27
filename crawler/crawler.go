@@ -1,11 +1,14 @@
 package crawler
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net"
 	"net/url"
+	"os"
 	"pathik/storage"
 	"strings"
 	"sync"
@@ -14,31 +17,55 @@ import (
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/go-rod/rod"
 	"github.com/go-shiori/go-readability"
+	"golang.org/x/time/rate"
 )
 
 // Configuration parameters
 var (
-	proxies = []string{ // Proxy URLs for rotation (leave empty for no proxies)
-		"ws://proxy1:9222",
-		"ws://proxy2:9222",
-		"ws://proxy3:9222",
-	}
-	useProxies = false     // Enable/disable proxy rotation
+	// Rate limiter to prevent DOS attacks - default 1 request per second
+	rateLimiter = rate.NewLimiter(rate.Limit(1), 3) // 1 req/sec with burst of 3
+
 	userAgents = []string{ // User-agents for rotation
 		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 	}
-	maxRetries            = 3               // Number of retries for failed fetches
-	retryDelay            = 2 * time.Second // Delay between retries
-	maxConcurrent         = 5               // Max concurrent crawls
-	minContentLength      = 5000            // Min HTML length to assume page is complete
-	stabilityCheckTimeout = 3 * time.Second // Timeout for dynamic content stability wait
+	maxRetries            = 3                // Number of retries for failed fetches
+	retryDelay            = 2 * time.Second  // Delay between retries
+	maxConcurrent         = 5                // Max concurrent crawls
+	minContentLength      = 5000             // Min HTML length to assume page is complete
+	stabilityCheckTimeout = 3 * time.Second  // Timeout for dynamic content stability wait
+	maxContentLength      = 20 * 1024 * 1024 // 20 MB max content size
 )
 
-// getRandomProxy returns a random proxy from the list or empty string if disabled
+// LoadProxies loads proxies from environment variables
+func LoadProxies() []string {
+	// Check environment variable for proxy list
+	proxyEnv := strings.TrimSpace(os.Getenv("PATHIK_PROXIES"))
+	if proxyEnv == "" {
+		return []string{}
+	}
+
+	// Split by commas
+	proxies := strings.Split(proxyEnv, ",")
+
+	// Validate proxy URLs
+	var validProxies []string
+	for _, p := range proxies {
+		if strings.HasPrefix(p, "ws://") || strings.HasPrefix(p, "wss://") {
+			validProxies = append(validProxies, strings.TrimSpace(p))
+		} else {
+			log.Printf("Warning: Invalid proxy format for %s, must start with ws:// or wss://", p)
+		}
+	}
+
+	return validProxies
+}
+
+// getRandomProxy returns a random proxy from the loaded list
 func getRandomProxy() string {
-	if !useProxies || len(proxies) == 0 {
+	proxies := LoadProxies()
+	if len(proxies) == 0 {
 		return ""
 	}
 	return proxies[rand.Intn(len(proxies))]
@@ -49,8 +76,100 @@ func getRandomUserAgent() string {
 	return userAgents[rand.Intn(len(userAgents))]
 }
 
+// isPrivateIP checks if an IP address is private
+func isPrivateIP(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+
+	// Get the IPv4 representation
+	ipv4 := ip.To4()
+	if ipv4 == nil {
+		// Not an IPv4 address
+		return false
+	}
+
+	// Check for private IP ranges
+	privateRanges := []struct {
+		start net.IP
+		end   net.IP
+	}{
+		{net.ParseIP("10.0.0.0").To4(), net.ParseIP("10.255.255.255").To4()},
+		{net.ParseIP("172.16.0.0").To4(), net.ParseIP("172.31.255.255").To4()},
+		{net.ParseIP("192.168.0.0").To4(), net.ParseIP("192.168.255.255").To4()},
+		{net.ParseIP("127.0.0.0").To4(), net.ParseIP("127.255.255.255").To4()},
+	}
+
+	for _, r := range privateRanges {
+		if r.start == nil || r.end == nil {
+			continue
+		}
+
+		if ipv4[0] == r.start[0] &&
+			ipv4[1] >= r.start[1] &&
+			ipv4[1] <= r.end[1] {
+			return true
+		}
+	}
+
+	return false
+}
+
+// ValidateURL checks if a URL is safe to crawl
+func ValidateURL(rawURL string) error {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL format: %v", err)
+	}
+
+	// Check for allowed schemes
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return fmt.Errorf("only HTTP and HTTPS schemes are allowed")
+	}
+
+	// Some URLs might not need IP resolution (e.g., localhost)
+	if parsedURL.Hostname() == "localhost" || parsedURL.Hostname() == "127.0.0.1" {
+		return fmt.Errorf("localhost access is restricted for security")
+	}
+
+	// Resolve hostname to IP
+	host := parsedURL.Hostname()
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		// If we can't resolve the hostname, allow it (might be temporary DNS issue)
+		log.Printf("Warning: Could not resolve hostname %s: %v", host, err)
+		return nil
+	}
+
+	// No IPs found
+	if len(ips) == 0 {
+		log.Printf("Warning: No IPs found for hostname %s", host)
+		return nil
+	}
+
+	// Check if any of the IPs are private
+	for _, ip := range ips {
+		if isPrivateIP(ip.String()) {
+			return fmt.Errorf("crawling private IP addresses is not allowed")
+		}
+	}
+
+	return nil
+}
+
 // FetchPage retrieves HTML from a URL with retries and smart dynamic content handling
 func FetchPage(url string, proxy string) (string, error) {
+	// Validate URL before fetching
+	if err := ValidateURL(url); err != nil {
+		return "", err
+	}
+
+	// Apply rate limiting
+	if err := rateLimiter.Wait(context.Background()); err != nil {
+		return "", fmt.Errorf("rate limit error: %v", err)
+	}
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		browser := rod.New()
 		if proxy != "" {
@@ -71,6 +190,13 @@ func FetchPage(url string, proxy string) (string, error) {
 			continue
 		}
 
+		// Check content length limit
+		if len(html) > maxContentLength {
+			log.Printf("Content length exceeds limit (%d > %d bytes), truncating",
+				len(html), maxContentLength)
+			html = html[:maxContentLength]
+		}
+
 		// If HTML is long enough, assume it's complete and return
 		if len(html) >= minContentLength {
 			return html, nil
@@ -85,6 +211,12 @@ func FetchPage(url string, proxy string) (string, error) {
 		// Get final HTML after stability check
 		html, err = page.HTML()
 		if err == nil {
+			// Check content length limit again
+			if len(html) > maxContentLength {
+				log.Printf("Content length exceeds limit (%d > %d bytes), truncating",
+					len(html), maxContentLength)
+				html = html[:maxContentLength]
+			}
 			return html, nil
 		}
 		log.Printf("Attempt %d failed for %s: %v", attempt+1, url, err)
