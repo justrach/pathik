@@ -228,3 +228,18 @@ func CrawlURLs(urls []string, outputDir string) {
 	wg.Wait()
 	fmt.Println("Crawling complete!")
 }
+
+// Export fetchPage as FetchPage for use by other packages
+func FetchPage(url string, proxy string) (string, error) {
+	return fetchPage(url, proxy)
+}
+
+// Export extractHTMLContent as ExtractHTMLContent for use by other packages
+func ExtractHTMLContent(htmlStr, urlStr string) (string, error) {
+	return extractHTMLContent(htmlStr, urlStr)
+}
+
+// Export convertToMarkdown as ConvertToMarkdown for use by other packages
+func ConvertToMarkdown(htmlStr string) (string, error) {
+	return convertToMarkdown(htmlStr)
+}

@@ -100,6 +100,107 @@ pathik crawl -s https://example.com https://httpbin.org/html
 
 # Upload to R2 (Cloudflare)
 pathik r2 https://example.com
+
+# Stream crawled content to Kafka
+pathik kafka https://example.com
+
+# Stream only HTML content to Kafka
+pathik kafka -content html https://example.com
+
+# Stream only Markdown content to Kafka
+pathik kafka -content markdown https://example.com
+
+# Stream to a specific Kafka topic
+pathik kafka -topic user1_crawl_data https://example.com
+
+# Add a session ID for multi-user environments
+pathik kafka --session user123 https://example.com
+
+# Combine options
+pathik kafka -content html -topic user1_data --session user123 https://example.com
+```
+
+## Kafka Streaming
+
+Pathik supports streaming crawled content directly to Kafka. This is useful for real-time processing pipelines.
+
+### Kafka Configuration
+
+Configure Kafka connection details in the `.env` file:
+
+```
+KAFKA_BROKERS=localhost:9092        # Comma-separated list of brokers
+KAFKA_TOPIC=pathik_crawl_data       # Topic to publish to
+KAFKA_USERNAME=                     # Optional username for SASL authentication
+KAFKA_PASSWORD=                     # Optional password for SASL authentication
+KAFKA_CLIENT_ID=pathik-crawler      # Client ID for Kafka
+KAFKA_USE_TLS=false                 # Whether to use TLS
+```
+
+### Kafka Message Format
+
+When streaming to Kafka, Pathik sends two messages per URL:
+
+1. HTML Content:
+   - Key: URL
+   - Value: Raw HTML content
+   - Headers:
+     - url: The original URL
+     - contentType: "text/html"
+     - timestamp: ISO 8601 timestamp
+
+2. Markdown Content:
+   - Key: URL
+   - Value: Markdown content
+   - Headers:
+     - url: The original URL
+     - contentType: "text/markdown"
+     - timestamp: ISO 8601 timestamp
+
+### Usage with Kafka Consumers
+
+Here's a minimal example of consuming Pathik messages with a Kafka consumer:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "github.com/segmentio/kafka-go"
+)
+
+func main() {
+    reader := kafka.NewReader(kafka.ReaderConfig{
+        Brokers:   []string{"localhost:9092"},
+        Topic:     "pathik_crawl_data",
+        Partition: 0,
+        MinBytes:  10e3, // 10KB
+        MaxBytes:  10e6, // 10MB
+    })
+    defer reader.Close()
+
+    for {
+        m, err := reader.ReadMessage(context.Background())
+        if err != nil {
+            break
+        }
+        
+        url := string(m.Key)
+        contentType := ""
+        
+        // Extract content type from headers
+        for _, header := range m.Headers {
+            if header.Key == "contentType" {
+                contentType = string(header.Value)
+                break
+            }
+        }
+        
+        fmt.Printf("Received from %s: %s content (%d bytes)\n", 
+            url, contentType, len(m.Value))
+    }
+}
 ```
 
 ## Using in Docker
@@ -151,37 +252,3 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install in development mode
 pip install -e .
 ```
-
-### Building Binaries Locally
-
-```bash
-# Build for current platform
-python build_binary.py
-
-# Build for all platforms
-python build_binary.py --all
-
-# Build for specific platform
-python build_binary.py --os linux --arch amd64
-```
-
-### Release Process
-
-Pathik uses GitHub Actions to automate the release process:
-
-1. Create and push a new tag:
-   ```bash
-   git tag -a v0.2.2 -m "Release v0.2.2"
-   git push origin v0.2.2
-   ```
-
-2. GitHub Actions will:
-   - Build binaries for all supported platforms
-   - Create a GitHub Release with the binaries
-   - Build and publish the Python package to PyPI
-
-The PyPI package will download the appropriate binary from GitHub releases when needed.
-
-## License
-
-Apache 2.0 

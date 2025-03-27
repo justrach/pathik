@@ -15,7 +15,9 @@ pathik.egg-info/PKG-INFO
 pathik.egg-info/SOURCES.txt
 pathik.egg-info/dependency_links.txt
 pathik.egg-info/entry_points.txt
+pathik.egg-info/requires.txt
 pathik.egg-info/top_level.txt
+pathik/bin/.gitkeep
 pathik/bin/pathik_crawler
 pathik/bin/darwin_amd64/pathik_bin
 pathik/bin/darwin_arm64/pathik_bin
