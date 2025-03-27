@@ -33,6 +33,8 @@ def main():
     kafka_parser.add_argument("-s", "--sequential", action="store_true", help="Use sequential (non-parallel) crawling")
     kafka_parser.add_argument("-b", "--brokers", help="Kafka brokers (comma-separated)")
     kafka_parser.add_argument("-t", "--topic", help="Kafka topic to stream to")
+    kafka_parser.add_argument("-c", "--content", choices=["html", "markdown", "both"], default="both",
+                            help="Content type to stream (html, markdown, or both)")
     
     # Version command
     version_parser = subparsers.add_parser("version", help="Print version information")
@@ -94,6 +96,10 @@ def main():
                 # Add parallel flag if sequential is not specified
                 if not args.sequential:
                     cmd.append("-parallel")
+                
+                # Add content type flag if specified
+                if args.content and args.content != "both":
+                    cmd.extend(["-content", args.content])
                 
                 # Add Kafka-specific options if provided
                 if args.brokers:

@@ -4,12 +4,19 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"strings"
+	"sync"
 
 	"pathik/crawler"
 	"pathik/storage"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load .env file if it exists
+	godotenv.Load()
+
 	// Parse command-line arguments
 	crawlFlag := flag.Bool("crawl", false, "Crawl URLs without uploading")
 	parallelFlag := flag.Bool("parallel", true, "Use parallel crawling (default: true)")
@@ -17,12 +24,22 @@ func main() {
 	dirFlag := flag.String("dir", ".", "Directory containing files to upload")
 	useR2Flag := flag.Bool("r2", false, "Upload files to Cloudflare R2 (requires uuid)")
 	outDirFlag := flag.String("outdir", ".", "Directory to save crawled files")
+	useKafkaFlag := flag.Bool("kafka", false, "Stream crawled content to Kafka")
+	contentTypeFlag := flag.String("content", "both", "Content type to stream to Kafka: html, markdown, or both (default: both)")
+	topicFlag := flag.String("topic", "", "Kafka topic to stream to (overrides KAFKA_TOPIC environment variable)")
+	sessionFlag := flag.String("session", "", "Session ID to include with Kafka messages (for multi-user environments)")
 	flag.Parse()
 
 	// Get URLs from remaining arguments
 	urls := flag.Args()
 	if len(urls) == 0 {
 		log.Fatal("No URLs provided")
+	}
+
+	// Kafka mode - crawl and stream to Kafka
+	if *useKafkaFlag {
+		streamToKafka(urls, *parallelFlag, *contentTypeFlag, *topicFlag, *sessionFlag)
+		return
 	}
 
 	// Just crawl URLs if -crawl flag is set
@@ -92,6 +109,97 @@ func main() {
 
 		fmt.Println("Upload process complete!")
 	} else {
-		fmt.Println("No action specified. Use -crawl to crawl URLs or -r2 to upload to R2.")
+		fmt.Println("No action specified. Use -crawl to crawl URLs, -r2 to upload to R2, or -kafka to stream to Kafka.")
 	}
+}
+
+func streamToKafka(urls []string, parallel bool, contentType string, topic string, session string) {
+	// Create a Kafka writer
+	kafkaConfig, err := storage.LoadKafkaConfig()
+	if err != nil {
+		fmt.Printf("Error loading Kafka configuration: %v\n", err)
+		return
+	}
+
+	// Override topic if specified on command line
+	if topic != "" {
+		kafkaConfig.Topic = topic
+		fmt.Printf("Using command-line specified Kafka topic: %s\n", topic)
+	}
+
+	writer, err := storage.CreateKafkaWriter(kafkaConfig)
+	if err != nil {
+		fmt.Printf("Error creating Kafka writer: %v\n", err)
+		return
+	}
+	defer storage.CloseKafkaWriter(writer)
+
+	fmt.Printf("Streaming content to Kafka topic %s at %s\n",
+		kafkaConfig.Topic, strings.Join(kafkaConfig.Brokers, ","))
+
+	// Determine content types to stream
+	var contentTypes []storage.ContentType
+	switch contentType {
+	case "html":
+		contentTypes = []storage.ContentType{storage.HTMLContent}
+		fmt.Println("Streaming HTML content only")
+	case "markdown":
+		contentTypes = []storage.ContentType{storage.MarkdownContent}
+		fmt.Println("Streaming Markdown content only")
+	default:
+		// Empty slice means both will be streamed
+		fmt.Println("Streaming both HTML and Markdown content")
+	}
+
+	if parallel && len(urls) > 1 {
+		var wg sync.WaitGroup
+		for _, url := range urls {
+			wg.Add(1)
+			go func(u string) {
+				defer wg.Done()
+				processURLForKafka(u, writer, contentTypes, session)
+			}(url)
+		}
+		wg.Wait()
+	} else {
+		for _, url := range urls {
+			processURLForKafka(url, writer, contentTypes, session)
+		}
+	}
+
+	fmt.Println("Completed streaming to Kafka")
+}
+
+func processURLForKafka(url string, writer interface{}, contentTypes []storage.ContentType, session string) {
+	fmt.Printf("Streaming content from %s to Kafka\n", url)
+
+	// Fetch the page
+	htmlContent, err := crawler.FetchPage(url, "")
+	if err != nil {
+		fmt.Printf("Error fetching %s: %v\n", url, err)
+		return
+	}
+
+	// Extract HTML content
+	extractedHTML, err := crawler.ExtractHTMLContent(htmlContent, url)
+	if err != nil {
+		fmt.Printf("Error extracting content from %s: %v\n", url, err)
+		return
+	}
+
+	// Convert to markdown
+	markdown, err := crawler.ConvertToMarkdown(extractedHTML)
+	if err != nil {
+		fmt.Printf("Error converting to Markdown: %v\n", err)
+		return
+	}
+
+	// Stream to Kafka with specified content types
+	err = storage.StreamToKafka(writer, url, htmlContent, markdown, session, contentTypes...)
+	if err != nil {
+		fmt.Printf("Error streaming content to Kafka for %s: %v\n", url, err)
+		return
+	}
+
+	fmt.Printf("Successfully streamed content from %s to Kafka\n", url)
 }
