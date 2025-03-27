@@ -15,6 +15,7 @@ A high-performance web crawler implemented in Go with Python and JavaScript bind
 - Cloudflare R2 integration
 - Kafka streaming support
 - Memory-efficient (uses ~10x less memory than browser automation tools)
+- Automatic binary version management
 
 ## Performance Benchmarks
 
@@ -57,6 +58,31 @@ pip install pathik
 ```
 
 The package will automatically download the correct binary for your platform from GitHub releases on first use.
+
+### Binary Version Management
+
+Pathik now automatically handles binary version checking and updates:
+
+- When you install or upgrade the Python package, it will check if the binary matches the package version
+- If the versions don't match, it will automatically download the correct binary
+- You can manually check and update the binary with:
+  ```python
+  # Force binary update
+  import pathik
+  from pathik.crawler import get_binary_path
+  binary_path = get_binary_path(force_download=True)
+  ```
+
+- Command line options:
+  ```bash
+  # Check if binary is up to date
+  pathik --check-binary
+  
+  # Force update of the binary
+  pathik --force-update-binary
+  ```
+
+This ensures you always have the correct binary version with all the latest features, especially when using new functionality like Kafka streaming with session IDs.
 
 ## Usage
 
