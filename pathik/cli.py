@@ -175,21 +175,21 @@ def crawl(urls: Union[str, List[str]],
             command.append("-kafka")
             
             if kafka_brokers:
-                command.extend(["-brokers", kafka_brokers])
+                command.extend(["--kafka-brokers", kafka_brokers])
             if kafka_topic:
-                command.extend(["-topic", kafka_topic])
+                command.extend(["--kafka-topic", kafka_topic])
             if kafka_username:
-                command.extend(["-username", kafka_username])
+                command.extend(["--kafka-username", kafka_username])
             if kafka_password:
-                command.extend(["-password", kafka_password])
+                command.extend(["--kafka-password", kafka_password])
             if kafka_client_id:
-                command.extend(["-client-id", kafka_client_id])
+                command.extend(["--kafka-client-id", kafka_client_id])
             if kafka_use_tls:
-                command.append("-use-tls")
+                command.append("--kafka-use-tls")
         
         # Session ID option
         if session_id:
-            command.extend(["-session", session_id])
+            command.extend(["--session-id", session_id])
             
         # Add -crawl flag AFTER options
         command.append("-crawl")

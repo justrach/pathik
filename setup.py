@@ -9,7 +9,7 @@ from setuptools.command.develop import develop
 from setuptools.command.sdist import sdist
 from setuptools.command.bdist_wheel import bdist_wheel
 
-VERSION = '0.2.2'
+VERSION = '0.3.11'
 
 def detect_platform():
     """Detect the current platform more reliably"""
@@ -165,8 +165,8 @@ setup(
     description="A web crawler implemented in Go with Python bindings",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="Your Name",
-    author_email="your.email@example.com",
+    author="Rach Pradhan",
+    author_email="me@rachit.ai",
     url="https://github.com/justrach/pathik",
     packages=find_packages(),
     package_data={
@@ -180,7 +180,8 @@ setup(
     },
     install_requires=[
         "requests>=2.25.0",  # For downloading binaries
-        "tqdm>=4.50.0",      # For download progress bar
+        "tqdm>=4.50.0",      # For progress bar
+        "satya>=0.2.6",      # For type validation and schema definitions
     ],
     extras_require={
         "kafka": ["kafka-python>=2.0.0"],
