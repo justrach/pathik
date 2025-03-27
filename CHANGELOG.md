@@ -7,16 +7,22 @@ All notable changes to Pathik will be documented in this file.
 ### Added
 - New example scripts for Kafka streaming: `native_kafka_demo.py` and `safe_kafka_demo.py`
 - Improved documentation for Kafka integration
+- Added more compression options (gzip, snappy, lz4, zstd) for Kafka streaming
+- Added max message size and buffer memory controls for Kafka performance tuning
 
 ### Changed
-- Fixed command line flags to match Go binary expectations (-content instead of --content-type)
-- Correct ordering of arguments for Kafka flags
-- Simplified Kafka streaming interface in __init__.py
+- Fixed command line flags to align with Go binary expectations
+- Corrected argument ordering for Kafka flags
+- Simplified Kafka streaming interface in `__init__.py`
+- Updated Go binary to support compression parameters
+- Modified stream_to_kafka to support compression options in Python SDK
 
 ### Fixed
 - Fixed binary command flag format issues in CLI module
-- Resolved argument mismatch between Python wrapper and Go binary
+- Fixed argument mismatches between Python wrapper and Go binary
 - Fixed session ID handling in Kafka streaming functions
+- Addressed compression codec selection in Kafka producer configuration
+- Fixed missing compression flags in Go binary for Kafka streaming
 
 ## [0.3.0] - 2023-10-28
 

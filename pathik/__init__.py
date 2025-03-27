@@ -14,7 +14,7 @@ import time
 import shutil
 
 # Set version
-__version__ = "0.3.11"  # Incremented version for command ordering fix
+__version__ = "0.3.1"  # Incremented version for command ordering fix
 
 # NOTE: Version 0.3.0 fixes a critical bug with command-line argument ordering.
 # Previously, flags were incorrectly placed after URLs, causing errors like:
@@ -42,7 +42,10 @@ def stream_to_kafka(
     content_type: Literal["html", "markdown", "both"] = "both",
     topic: Optional[str] = None,
     session: Optional[str] = None,
-    parallel: bool = True
+    parallel: bool = True,
+    compression_type: Optional[str] = None,
+    max_message_size: Optional[int] = None,
+    buffer_memory: Optional[int] = None
 ) -> Dict[str, Dict[str, Union[bool, str]]]:
     """
     Crawl the given URLs and stream the content to Kafka.
@@ -53,6 +56,9 @@ def stream_to_kafka(
         topic: Kafka topic to stream to (uses KAFKA_TOPIC env var if None)
         session: Session ID for multi-user environments
         parallel: Whether to use parallel crawling for multiple URLs
+        compression_type: Compression algorithm to use ('gzip', 'snappy', 'lz4', 'zstd')
+        max_message_size: Maximum message size in bytes
+        buffer_memory: Kafka producer buffer memory in bytes
         
     Returns:
         Dictionary mapping URLs to their streaming status
@@ -81,11 +87,26 @@ def stream_to_kafka(
     
     # Connect to Kafka
     try:
-        producer = KafkaProducer(
-            bootstrap_servers=kafka_brokers.split(','),
-            key_serializer=str.encode,
-            value_serializer=str.encode
-        )
+        # Configure Kafka producer with extra options if provided
+        producer_config = {
+            'bootstrap_servers': kafka_brokers.split(','),
+            'key_serializer': str.encode,
+            'value_serializer': str.encode
+        }
+        
+        # Add compression if specified
+        if compression_type:
+            producer_config['compression_type'] = compression_type
+            
+        # Add max message size if specified
+        if max_message_size:
+            producer_config['max_request_size'] = max_message_size
+            
+        # Add buffer memory if specified
+        if buffer_memory:
+            producer_config['buffer_memory'] = buffer_memory
+            
+        producer = KafkaProducer(**producer_config)
     except Exception as e:
         print(f"Failed to connect to Kafka broker(s) {kafka_brokers}: {e}")
         print("Using fallback simulation mode without actual streaming.")
@@ -163,6 +184,10 @@ def stream_to_kafka(
                     "session_id": session
                 }
                 
+                # Add compression info if provided
+                if compression_type:
+                    results[url]["details"]["compression_type"] = compression_type
+                
             except Exception as e:
                 print(f"Error streaming {url}: {e}")
                 results[url] = {"success": False, "error": str(e)}
@@ -188,7 +213,10 @@ def _simulated_stream_to_kafka(
     content_type: str = "both",
     topic: Optional[str] = None,
     session: Optional[str] = None,
-    parallel: bool = True
+    parallel: bool = True,
+    compression_type: Optional[str] = None,
+    max_message_size: Optional[int] = None,
+    buffer_memory: Optional[int] = None
 ) -> Dict[str, Dict[str, Union[bool, str]]]:
     """
     Fallback implementation that simulates Kafka streaming.
@@ -220,6 +248,10 @@ def _simulated_stream_to_kafka(
                     "session_id": session,
                     "note": "SIMULATED - not actually sent to Kafka"
                 }
+                
+                # Add compression info if provided
+                if compression_type:
+                    formatted_result[url]["details"]["compression_type"] = compression_type
         
         return formatted_result
     except Exception as e:

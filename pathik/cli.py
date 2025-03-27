@@ -350,6 +350,12 @@ Examples:
     kafka_parser.add_argument("--kafka-client-id", help="Kafka client ID")
     kafka_parser.add_argument("--kafka-use-tls", action="store_true", help="Use TLS for Kafka connection")
     kafka_parser.add_argument("--session-id", help="Session ID for grouping crawls")
+    kafka_parser.add_argument("--compression", choices=["gzip", "snappy", "lz4", "zstd"], 
+                         help="Compression algorithm to use for Kafka messages")
+    kafka_parser.add_argument("--max-message-size", type=int, 
+                         help="Maximum message size in bytes (default: 10MB)")
+    kafka_parser.add_argument("--buffer-memory", type=int, 
+                         help="Kafka producer buffer memory in bytes (default: 100MB)")
     
     # Create subparser for the 'version' command
     version_parser = subparsers.add_parser("version", help="Print version information")
@@ -468,36 +474,50 @@ Examples:
                 print(f"   Markdown Key: {info.get('r2_markdown_key')}")
         
         elif args.command == "kafka":
-            # For Kafka we need to use the Go binary directly
+            # Import the stream_to_kafka function directly for Kafka streaming
+            from pathik.crawler import stream_to_kafka
+            
             try:
-                result = crawl(
+                # Use the stream_to_kafka function directly
+                result = stream_to_kafka(
                     urls=args.urls,
-                    output_dir=args.output_dir,
+                    content_type=args.content_type,
+                    topic=args.kafka_topic,
+                    session=args.session_id,
                     parallel=args.parallel,
-                    selector=args.selector,
-                    selector_files=args.selector_files,
-                    num_workers=args.workers,
-                    timeout=args.timeout,
-                    limit=args.limit,
-                    validate=args.validate,
-                    skip_tls=args.skip_tls,
-                    delay=args.delay,
-                    chrome_path=args.chrome_path,
-                    hostname=args.hostname,
-                    r2=False,
-                    kafka=True,
-                    kafka_brokers=args.kafka_brokers,
-                    kafka_topic=args.kafka_topic,
-                    kafka_username=args.kafka_username,
-                    kafka_password=args.kafka_password,
-                    kafka_client_id=args.kafka_client_id,
-                    kafka_use_tls=args.kafka_use_tls,
-                    session_id=args.session_id
+                    compression_type=args.compression,
+                    max_message_size=args.max_message_size,
+                    buffer_memory=args.buffer_memory
                 )
                 
                 print("\nKafka Streaming Results:")
                 print("-----------------------")
-                print(f"✅ Successfully streamed {len(args.urls)} URLs to Kafka")
+                
+                success_count = 0
+                failure_count = 0
+                
+                for url, info in result.items():
+                    if info.get("success", False):
+                        success_count += 1
+                        print(f"✅ {url}: Successfully streamed")
+                        # Print details if available
+                        if "details" in info:
+                            details = info["details"]
+                            if "topic" in details:
+                                print(f"   Topic: {details['topic']}")
+                            if "compression_type" in details:
+                                print(f"   Compression: {details['compression_type']}")
+                            if "html_file" in details:
+                                print(f"   HTML content: {os.path.basename(details['html_file'])}")
+                            if "markdown_file" in details:
+                                print(f"   Markdown content: {os.path.basename(details['markdown_file'])}")
+                    else:
+                        failure_count += 1
+                        print(f"❌ {url}: Failed - {info.get('error', 'Unknown error')}")
+                
+                print(f"\nSuccessfully streamed {success_count} out of {len(args.urls)} URLs")
+                if failure_count > 0:
+                    print(f"Failed to stream {failure_count} URLs")
             except Exception as e:
                 print(f"❌ Error streaming to Kafka: {e}")
                 return 1

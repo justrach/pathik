@@ -585,7 +585,10 @@ def stream_to_kafka(
     content_type: str = "both",
     topic: Optional[str] = None,
     session: Optional[str] = None,
-    parallel: bool = True
+    parallel: bool = True,
+    compression_type: Optional[str] = None,
+    max_message_size: Optional[int] = None,
+    buffer_memory: Optional[int] = None
 ) -> Dict[str, Dict[str, Union[bool, str]]]:
     """
     Stream the content from the given URLs to Kafka
@@ -596,6 +599,9 @@ def stream_to_kafka(
         topic: Kafka topic to stream to (uses KAFKA_TOPIC env var if None)
         session: Session ID for multi-user environments
         parallel: Whether to use parallel crawling for multiple URLs
+        compression_type: Compression algorithm to use ('gzip', 'snappy', 'lz4', 'zstd')
+        max_message_size: Maximum message size in bytes
+        buffer_memory: Kafka producer buffer memory in bytes
         
     Returns:
         Dictionary mapping URLs to their streaming status
@@ -610,6 +616,10 @@ def stream_to_kafka(
     # Validate content type
     if content_type not in ["html", "markdown", "both"]:
         raise ValueError("Content type must be 'html', 'markdown', or 'both'")
+    
+    # Validate compression type if provided
+    if compression_type and compression_type not in ["gzip", "snappy", "lz4", "zstd"]:
+        raise ValueError("Compression type must be 'gzip', 'snappy', 'lz4', or 'zstd'")
     
     # Create a temporary directory for output
     temp_dir = tempfile.mkdtemp(prefix="pathik_kafka_")
@@ -642,6 +652,14 @@ def stream_to_kafka(
         if session:
             command.extend(["-session", session])
             
+        # Add compression options if provided
+        if compression_type:
+            command.extend(["-compression", compression_type])
+        if max_message_size:
+            command.extend(["-max-message-size", str(max_message_size)])
+        if buffer_memory:
+            command.extend(["-buffer-memory", str(buffer_memory)])
+            
         # Add -crawl flag AFTER options
         command.append("-crawl")
         
@@ -653,10 +671,34 @@ def stream_to_kafka(
             print(f"Running command: {' '.join(command)}")
             stdout, stderr = _run_go_command(command)
             
-            # Create a success result for each URL
+            # Create a detailed result for each URL
             result = {}
             for url in urls:
-                result[url] = {"success": True}
+                # Parse details from stdout if available
+                details = {}
+                if topic:
+                    details["topic"] = topic
+                
+                # Look for HTML and Markdown files in the temp directory
+                html_file, md_file = _find_files_for_url(temp_dir, url)
+                if html_file:
+                    details["html_file"] = html_file
+                if md_file:
+                    details["markdown_file"] = md_file
+                
+                # Add session ID if provided
+                if session:
+                    details["session_id"] = session
+                
+                # Add compression details if provided
+                if compression_type:
+                    details["compression_type"] = compression_type
+                
+                # Add success status and details
+                result[url] = {
+                    "success": True,
+                    "details": details
+                }
             
             return result
         except Exception as e:

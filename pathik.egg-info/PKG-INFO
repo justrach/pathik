@@ -1,10 +1,10 @@
 Metadata-Version: 2.4
 Name: pathik
-Version: 0.2.2
+Version: 0.3.11
 Summary: A web crawler implemented in Go with Python bindings
 Home-page: https://github.com/justrach/pathik
-Author: Your Name
-Author-email: your.email@example.com
+Author: Rach Pradhan
+Author-email: me@rachit.ai
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
@@ -13,6 +13,7 @@ Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: requests>=2.25.0
 Requires-Dist: tqdm>=4.50.0
+Requires-Dist: satya>=0.2.6
 Provides-Extra: kafka
 Requires-Dist: kafka-python>=2.0.0; extra == "kafka"
 Dynamic: author
@@ -48,6 +49,8 @@ A high-performance web crawler implemented in Go with Python and JavaScript bind
 - Automatic binary version management
 - Customizable compression options (Gzip and Snappy support)
 - Session-based message tracking for multi-user environments
+- Type-safe API with validation using satya
+- Improved error handling and structured outputs
 
 ## Performance Benchmarks
 
@@ -120,7 +123,7 @@ This ensures you always have the correct binary version with all the latest feat
 
 ### Python API
 
-#### Basic Crawling
+#### Standard API
 
 ```python
 import pathik
@@ -161,6 +164,59 @@ except CrawlerError as e:
     print(f"Crawler error: {e}")
 ```
 
+#### Type-Safe API (Recommended)
+
+The type-safe API provides enhanced validation, better error messages, and structured outputs:
+
+```python
+import pathik
+from pathik import safe_crawl
+from pathik.schema import CrawlParams
+
+# Crawl a single URL with validation
+try:
+    # Create structured parameters
+    params = CrawlParams(
+        urls="https://example.com",
+        output_dir="./output"
+    )
+    
+    # Use the safe API
+    result = safe_crawl(
+        urls="https://example.com",
+        output_dir="./output"
+    )
+    
+    # Access the validated results
+    for url, data in result.items():
+        print(f"URL: {url}")
+        print(f"HTML file: {data.get('html')}")
+        print(f"Markdown file: {data.get('markdown')}")
+        
+except ValueError as e:
+    print(f"Validation error: {e}")
+    
+# Alternatively, use keyword arguments directly
+try:
+    result = safe_crawl(
+        urls=["https://example.com", "https://httpbin.org/html"],
+        parallel=True,
+        output_dir="./output"
+    )
+    
+    # Access results
+    for url, data in result.items():
+        print(f"URL: {url}")
+        print(f"Success: {data.get('success', False)}")
+        if data.get('success', False):
+            print(f"Files: {data.get('html')}, {data.get('markdown')}")
+        else:
+            print(f"Error: {data.get('error')}")
+            
+except ValueError as e:
+    print(f"Validation error: {e}")
+```
+
 #### R2 Upload
 
 ```python
@@ -194,48 +250,137 @@ except CrawlerError as e:
     print(f"Crawler error: {e}")
 ```
 
-#### Secure Kafka Streaming with Buffer Customization
+#### Kafka Streaming
+
+##### Standard API
 
 ```python
 import pathik
 import uuid
-from pathik.crawler import CrawlerError
+
+# Generate a session ID for tracking
+session_id = str(uuid.uuid4())
+
+# Stream a single URL to Kafka
+result = pathik.stream_to_kafka(
+    urls="https://example.com",
+    session=session_id
+)
+
+if "https://example.com" in result:
+    if result["https://example.com"].get("success", False):
+        print(f"Successfully streamed")
+
+# Stream multiple URLs
+results = pathik.stream_to_kafka(
+    urls=["https://example.com", "https://httpbin.org/html"],
+    content_type="both",     # Options: "html", "markdown", or "both"
+    topic="pathik_data",     # Optional custom topic
+    session=session_id,      # Optional session ID
+    parallel=True            # Process URLs in parallel (default)
+)
+
+# Check results
+for url, status in results.items():
+    if status.get("success", False):
+        print(f"Successfully streamed {url}")
+        if "details" in status:
+            details = status["details"]
+            print(f"  Topic: {details.get('topic')}")
+            print(f"  HTML Content: {details.get('html_file')}")
+            print(f"  Markdown Content: {details.get('markdown_file')}")
+    else:
+        print(f"Failed to stream {url}: {status.get('error')}")
+```
+
+##### Type-Safe API for Kafka Streaming (Recommended)
+
+For applications requiring robust input validation and error handling:
+
+```python
+import pathik
+from pathik.safe_api import safe_stream_to_kafka
+from pathik.schema import KafkaStreamParams
+import uuid
 
 try:
-    # Generate a session ID for tracking
-    session_id = str(uuid.uuid4())
-    
-    # Stream a single URL to Kafka
-    result = pathik.stream_to_kafka(
-        urls="https://example.com",
-        session=session_id
-    )
-    
-    if "https://example.com" in result:
-        if result["https://example.com"].get("success", False):
-            print(f"Successfully streamed")
-    
-    # Stream multiple URLs with custom options
-    results = pathik.stream_to_kafka(
+    # Create structured parameters
+    params = KafkaStreamParams(
         urls=["https://example.com", "https://httpbin.org/html"],
-        content_type="html",              # Options: "html", "markdown", or "both"
-        topic="custom_topic",             # Optional custom topic
-        session=session_id,               # Optional session ID
-        parallel=True,                    # Process URLs in parallel (default)
-        max_message_size=15728640,        # 15MB message size limit
-        buffer_memory=157286400           # 150MB buffer memory
+        content_type="both",
+        topic="pathik_data",
+        session_id=str(uuid.uuid4()),
+        parallel=True,
+        # Compression options
+        compression_type="gzip",       # Options: gzip, snappy, lz4, zstd
+        max_message_size=15728640,     # 15MB message size limit (default: 10MB)
+        buffer_memory=157286400        # 150MB buffer memory (default: 100MB)
     )
     
-    # Check results
-    for url, status in results.items():
-        if status.get("success", False):
-            print(f"Successfully streamed {url}")
-        else:
-            print(f"Failed to stream {url}: {status.get('error')}")
-            
-except CrawlerError as e:
-    print(f"Crawler error: {e}")
+    # Stream content with validation
+    result = safe_stream_to_kafka(params)
+    
+    # Process validated results
+    if result.success:
+        print(f"Successfully streamed {len(result.results)} URLs")
+        print(f"Session ID: {result.session_id}")
+        
+        for url, stream_info in result.results.items():
+            if stream_info.success:
+                print(f"✅ {url}: Success")
+                print(f"  Topic: {stream_info.topic}")
+                print(f"  Content types: {stream_info.content_types}")
+            else:
+                print(f"❌ {url}: Failed - {stream_info.error}")
+    else:
+        print(f"Streaming operation failed: {result.error}")
+        
+except ValueError as e:
+    print(f"Validation error: {e}")
 ```
+
+##### Compression Options for Kafka Streaming
+
+When streaming large web pages or handling high volumes of content, you can optimize performance by configuring compression:
+
+```python
+# Optimize for best compression ratio (slower)
+params = KafkaStreamParams(
+    urls=urls,
+    compression_type="gzip",
+    max_message_size=15728640,    # 15MB
+    buffer_memory=157286400       # 150MB
+)
+
+# Optimize for speed (moderate compression)
+params = KafkaStreamParams(
+    urls=urls,
+    compression_type="snappy",
+    max_message_size=10485760,    # 10MB (default)
+    buffer_memory=104857600       # 100MB (default)
+)
+
+# Optimize for throughput (fastest)
+params = KafkaStreamParams(
+    urls=urls,
+    compression_type="lz4",
+    max_message_size=10485760,
+    buffer_memory=104857600
+)
+
+# Best balance of speed and compression
+params = KafkaStreamParams(
+    urls=urls,
+    compression_type="zstd",
+    max_message_size=10485760,
+    buffer_memory=104857600
+)
+```
+
+Choose the appropriate configuration based on your specific requirements:
+- For large pages with a lot of text, use `gzip` or `zstd`
+- For high-volume crawling, use `lz4` or `snappy`
+- Adjust message size and buffer memory based on content size and available resources
 
 ### Command Line
 
@@ -270,118 +415,70 @@ pathik kafka -t user1_crawl_data https://example.com
 # Add a session ID for multi-user environments
 pathik kafka --session user123 https://example.com
 
-# Set custom buffer sizes
-pathik kafka --max-message-size 15728640 --buffer-memory 157286400 https://example.com
-
 # Combine options
-pathik kafka -c html -t user1_data --session user123 --max-message-size 15728640 https://example.com
+pathik kafka -c html -t user1_data --session user123 https://example.com
 ```
 
-## Kafka Streaming
+### Sample Kafka Streaming Examples
 
-Pathik supports streaming crawled content directly to Kafka. This is useful for real-time processing pipelines.
+We provide two example scripts in the examples directory to demonstrate Kafka streaming:
 
-### Kafka Configuration
-
-Configure Kafka connection details using environment variables or `.env` file:
-
-```
-KAFKA_BROKERS=localhost:9092        # Comma-separated list of brokers
-KAFKA_TOPIC=pathik_crawl_data       # Topic to publish to
-KAFKA_USERNAME=                     # Optional username for SASL authentication
-KAFKA_PASSWORD=                     # Optional password for SASL authentication
-KAFKA_CLIENT_ID=pathik-crawler      # Client ID for Kafka
-KAFKA_USE_TLS=false                 # Whether to use TLS
-KAFKA_MAX_MESSAGE_SIZE=10485760     # 10MB max message size (default)
-KAFKA_BUFFER_MEMORY=104857600       # 100MB buffer memory (default)
-KAFKA_MAX_REQUEST_SIZE=20971520     # 20MB max request size (default)
-```
-
-### Buffer Size Customization
-
-You can customize Kafka producer and consumer buffer sizes for handling large content:
+#### Basic Example (native_kafka_demo.py)
 
 ```python
-# Custom buffer sizes for producer
-pathik.stream_to_kafka(
-    "https://example.com",
-    max_message_size=15728640,    # 15MB max message size (default: 10MB)
-    buffer_memory=157286400       # 150MB buffer memory (default: 100MB)
+from pathik import stream_to_kafka
+
+# Stream a URL to Kafka
+results = stream_to_kafka(
+    urls="https://example.com",
+    content_type="both",
+    topic="pathik_crawl_data",
+    session="demo-session-123",
+    parallel=True
 )
 
-# For consuming large messages
-python kafka_consumer_direct.py --session=YOUR_SESSION_ID --max-bytes=20971520 --max-partition-bytes=10485760
+# Check results
+for url, result in results.items():
+    print(f"URL: {url}")
+    print(f"Success: {result.get('success', False)}")
+    if result.get('success', False) and 'details' in result:
+        details = result['details']
+        print(f"Topic: {details.get('topic')}")
+        print(f"HTML file: {details.get('html_file')}")
+        print(f"Markdown file: {details.get('markdown_file')}")
 ```
 
-For debugging or handling large web pages, you may need to increase these buffer sizes to prevent message size errors.
+#### Type-Safe Example (safe_kafka_demo.py)
 
-### Optional Kafka Dependencies
+```python
+from pathik import safe_stream_to_kafka
+from pathik.schema import KafkaStreamParams
 
-To use Kafka streaming, install the required dependencies:
+# Create validated parameters
+params = KafkaStreamParams(
+    urls=["https://example.com"],
+    content_type="both",
+    topic="pathik_crawl_data",
+    session_id="safe-demo-123",
+    parallel=True
+)
 
-```bash
-# Install pathik with Kafka support
-pip install "pathik[kafka]"
-
-# Or install the dependency separately
-pip install kafka-python
-
-# For Snappy compression support (recommended)
-pip install python-snappy
+try:
+    # Stream with validation
+    result = safe_stream_to_kafka(params)
+    
+    if result.success:
+        print(f"Successfully streamed {len(result.results)} URLs")
+        for url, info in result.results.items():
+            if info.success:
+                print(f"✅ {url}")
+                print(f"  Topic: {info.topic}")
+                print(f"  Files: {info.html_file}, {info.markdown_file}")
+            else:
+                print(f"❌ {url}: {info.error}")
+    else:
+        print(f"Operation failed: {result.error}")
+        
+except ValueError as e:
+    print(f"Validation error: {e}")
 ```
-
-If Kafka dependencies are not available, Pathik will use a fallback simulation mode that logs the messages locally without actually sending them to Kafka.
-
-### Kafka Message Format
-
-When streaming to Kafka, Pathik sends two messages per URL:
-
-1. HTML Content:
-   - Key: URL
-   - Value: Raw HTML content
-   - Headers:
-     - url: The original URL
-     - contentType: "text/html"
-     - timestamp: ISO 8601 timestamp
-     - sessionID: Session ID (if provided)
-
-2. Markdown Content:
-   - Key: URL
-   - Value: Markdown content
-   - Headers:
-     - url: The original URL
-     - contentType: "text/markdown"
-     - timestamp: ISO 8601 timestamp
-     - sessionID: Session ID (if provided)
-
-## Security Enhancements
-
-Pathik includes several security features to ensure safe and reliable crawling:
-
-### URL Validation
-
-URLs are validated to prevent security issues:
-- Only HTTP and HTTPS schemes are allowed
-- Private IP addresses and localhost access are restricted
-- Hostnames are resolved and checked against private IP ranges
-
-### Input Sanitization
-
-All inputs (file paths, session IDs, etc.) are sanitized to prevent injection attacks:
-- File paths are checked for directory traversal attempts
-- Session IDs are validated against a safe pattern (alphanumeric and some special chars)
-- Topic names and other parameters are validated for safe characters
-
-### Rate Limiting
-
-Built-in rate limiting prevents accidentally overloading target servers:
-- Default rate limit of 1 request per second with configurable burst
-- Automatic retries with exponential backoff
-- Delay between retries is configurable
-
-### Error Handling
-
-Robust error handling ensures graceful failure:
-- Detailed error messages for troubleshooting
-- Automatic retries for transient failures
-- Graceful shutdown with proper cleanup

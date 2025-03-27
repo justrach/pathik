@@ -15,13 +15,16 @@ import (
 
 // KafkaConfig holds configuration for Kafka
 type KafkaConfig struct {
-	Brokers  []string
-	Topic    string
-	Username string
-	Password string
-	ClientID string
-	UseTLS   bool
-	MaxRetry int
+	Brokers         []string
+	Topic           string
+	Username        string
+	Password        string
+	ClientID        string
+	UseTLS          bool
+	MaxRetry        int
+	CompressionType string
+	MaxMessageSize  int
+	BufferMemory    int
 }
 
 // LoadKafkaConfig loads Kafka configuration from environment variables
@@ -57,13 +60,32 @@ func LoadKafkaConfig() (KafkaConfig, error) {
 	}
 
 	config := KafkaConfig{
-		Brokers:  strings.Split(brokersStr, ","),
-		Topic:    topic,
-		Username: os.Getenv("KAFKA_USERNAME"),
-		Password: os.Getenv("KAFKA_PASSWORD"),
-		ClientID: os.Getenv("KAFKA_CLIENT_ID"),
-		UseTLS:   useTLS,
-		MaxRetry: maxRetry,
+		Brokers:         strings.Split(brokersStr, ","),
+		Topic:           topic,
+		Username:        os.Getenv("KAFKA_USERNAME"),
+		Password:        os.Getenv("KAFKA_PASSWORD"),
+		ClientID:        os.Getenv("KAFKA_CLIENT_ID"),
+		UseTLS:          useTLS,
+		MaxRetry:        maxRetry,
+		CompressionType: os.Getenv("KAFKA_COMPRESSION"),
+		MaxMessageSize:  0, // Default to 0 (uses Kafka default)
+		BufferMemory:    0, // Default to 0 (uses Kafka default)
+	}
+
+	// Try to parse MaxMessageSize if provided in env
+	maxMsgSizeStr := os.Getenv("KAFKA_MAX_MESSAGE_SIZE")
+	if maxMsgSizeStr != "" {
+		if val, err := strconv.Atoi(maxMsgSizeStr); err == nil {
+			config.MaxMessageSize = val
+		}
+	}
+
+	// Try to parse BufferMemory if provided in env
+	bufferMemoryStr := os.Getenv("KAFKA_BUFFER_MEMORY")
+	if bufferMemoryStr != "" {
+		if val, err := strconv.Atoi(bufferMemoryStr); err == nil {
+			config.BufferMemory = val
+		}
 	}
 
 	return config, nil
@@ -101,20 +123,46 @@ func CreateKafkaWriter(config KafkaConfig) (*kafka.Writer, error) {
 	}
 
 	// Create the writer with custom buffer configurations
-	writer := &kafka.Writer{
-		Addr:         kafka.TCP(config.Brokers...),
+	writerConfig := kafka.WriterConfig{
+		Brokers:      config.Brokers,
 		Topic:        config.Topic,
 		Balancer:     &kafka.LeastBytes{},
 		MaxAttempts:  config.MaxRetry,
 		BatchSize:    1,                    // Default to sending immediately
 		BatchTimeout: 1 * time.Millisecond, // Almost no delay
-		RequiredAcks: kafka.RequireAll,     // Wait for all replicas
-		Compression:  kafka.Gzip,           // Use Gzip instead of Snappy compression
-		Transport: &kafka.Transport{
-			SASL: dialer.SASLMechanism,
-			TLS:  dialer.TLS,
-		},
+		RequiredAcks: -1,                   // RequireAll = -1, wait for all replicas
+		Dialer:       dialer,
 	}
+
+	// Set message size limit if provided
+	if config.MaxMessageSize > 0 {
+		writerConfig.BatchBytes = config.MaxMessageSize
+	}
+
+	// Set buffer memory if provided
+	if config.BufferMemory > 0 {
+		writerConfig.Async = true
+		writerConfig.BatchSize = 10 // Adjust batch size when using async
+		writerConfig.BatchBytes = config.BufferMemory
+	}
+
+	writer := kafka.NewWriter(writerConfig)
+
+	// Set compression codec
+	compressionCodec := kafka.Compression(kafka.Gzip) // Default to Gzip
+	if config.CompressionType != "" {
+		switch strings.ToLower(config.CompressionType) {
+		case "gzip":
+			compressionCodec = kafka.Compression(kafka.Gzip)
+		case "snappy":
+			compressionCodec = kafka.Compression(kafka.Snappy)
+		case "lz4":
+			compressionCodec = kafka.Compression(kafka.Lz4)
+		case "zstd":
+			compressionCodec = kafka.Compression(kafka.Zstd)
+		}
+	}
+	writer.Compression = compressionCodec
 
 	// Set client ID if provided
 	if config.ClientID != "" {

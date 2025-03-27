@@ -25,6 +25,3 @@ pathik/bin/darwin_arm64/pathik_bin
 pathik/bin/linux_amd64/pathik_bin
 pathik/bin/linux_arm64/pathik_bin
 pathik/bin/windows_amd64/pathik_bin.exe
-test/test_command_ordering.py
-test/test_fixed_impl.py
-test/test_safe_api.py

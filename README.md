@@ -270,7 +270,7 @@ For applications requiring robust input validation and error handling:
 ```python
 import pathik
 from pathik.safe_api import safe_stream_to_kafka
-from pathik.schema import KafkaStreamParams, KafkaStreamResult
+from pathik.schema import KafkaStreamParams
 import uuid
 
 try:
@@ -280,11 +280,15 @@ try:
         content_type="both",
         topic="pathik_data",
         session_id=str(uuid.uuid4()),
-        parallel=True
+        parallel=True,
+        # Compression options
+        compression_type="gzip",       # Options: gzip, snappy, lz4, zstd
+        max_message_size=15728640,     # 15MB message size limit (default: 10MB)
+        buffer_memory=157286400        # 150MB buffer memory (default: 100MB)
     )
     
     # Stream content with validation
-    result: KafkaStreamResult = safe_stream_to_kafka(params)
+    result = safe_stream_to_kafka(params)
     
     # Process validated results
     if result.success:
@@ -304,6 +308,49 @@ try:
 except ValueError as e:
     print(f"Validation error: {e}")
 ```
+
+##### Compression Options for Kafka Streaming
+
+When streaming large web pages or handling high volumes of content, you can optimize performance by configuring compression:
+
+```python
+# Optimize for best compression ratio (slower)
+params = KafkaStreamParams(
+    urls=urls,
+    compression_type="gzip",
+    max_message_size=15728640,    # 15MB
+    buffer_memory=157286400       # 150MB
+)
+
+# Optimize for speed (moderate compression)
+params = KafkaStreamParams(
+    urls=urls,
+    compression_type="snappy",
+    max_message_size=10485760,    # 10MB (default)
+    buffer_memory=104857600       # 100MB (default)
+)
+
+# Optimize for throughput (fastest)
+params = KafkaStreamParams(
+    urls=urls,
+    compression_type="lz4",
+    max_message_size=10485760,
+    buffer_memory=104857600
+)
+
+# Best balance of speed and compression
+params = KafkaStreamParams(
+    urls=urls,
+    compression_type="zstd",
+    max_message_size=10485760,
+    buffer_memory=104857600
+)
+```
+
+Choose the appropriate configuration based on your specific requirements:
+- For large pages with a lot of text, use `gzip` or `zstd`
+- For high-volume crawling, use `lz4` or `snappy`
+- Adjust message size and buffer memory based on content size and available resources
 
 ### Command Line
 

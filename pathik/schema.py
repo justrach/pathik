@@ -202,6 +202,64 @@ class CrawlResult(Model):
         description="Session ID for multi-URL crawls"
     )
 
+class KafkaStreamParams(Model):
+    """Input parameters for Kafka streaming operations"""
+    urls: Union[str, List[str]] = Field(
+        description="URL or list of URLs to crawl and stream"
+    )
+    content_type: str = Field(
+        default="both",
+        description="Type of content to stream",
+        enum=["html", "markdown", "both"]
+    )
+    topic: Optional[str] = Field(
+        required=False,
+        description="Kafka topic to stream to"
+    )
+    session_id: Optional[str] = Field(
+        required=False,
+        description="Session ID for grouping messages"
+    )
+    parallel: bool = Field(
+        default=True,
+        description="Process URLs in parallel"
+    )
+    compression_type: Optional[str] = Field(
+        required=False,
+        description="Compression type",
+        enum=["gzip", "snappy", "lz4", "zstd"]
+    )
+    max_message_size: Optional[int] = Field(
+        required=False,
+        description="Maximum message size in bytes",
+        min_value=1024,
+        max_value=104857600  # 100MB
+    )
+    buffer_memory: Optional[int] = Field(
+        required=False,
+        description="Buffer memory in bytes",
+        min_value=1024,
+        max_value=1073741824  # 1GB
+    )
+
+class KafkaStreamResult(Model):
+    """Result of a Kafka streaming operation"""
+    success: bool = Field(
+        default=True,
+        description="Whether the streaming operation was successful"
+    )
+    error: Optional[str] = Field(
+        required=False,
+        description="Error message if the operation failed"
+    )
+    session_id: Optional[str] = Field(
+        required=False,
+        description="Session ID for grouping messages"
+    )
+    results: Dict[str, Any] = Field(
+        description="Mapping of URLs to their streaming results"
+    )
+
 # Helper functions to validate inputs and outputs
 def validate_crawl_params(params: Dict[str, Any]) -> Dict[str, Any]:
     """Validate crawl parameters against the schema"""
@@ -289,5 +347,79 @@ def validate_crawl_result(result: Dict[str, Any]) -> Dict[str, Any]:
     # Add back session ID if it was present
     if session_id is not None:
         result["session_id"] = session_id
+    
+    return result
+
+def validate_kafka_stream_params(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate Kafka streaming parameters against the schema"""
+    # Make a copy of params to avoid modifying the original
+    params_copy = params.copy()
+    
+    # Special handling for the 'urls' parameter
+    if 'urls' in params_copy:
+        urls = params_copy['urls']
+        
+        # Validate URL or list of URLs
+        if isinstance(urls, str):
+            # For single URL, just check if it looks like a URL
+            if not urls.startswith(('http://', 'https://')):
+                raise ValueError(f"Invalid URL format: {urls} - must start with http:// or https://")
+        elif isinstance(urls, list):
+            # For list of URLs, validate each one
+            for url in urls:
+                if not isinstance(url, str) or not url.startswith(('http://', 'https://')):
+                    raise ValueError(f"Invalid URL in list: {url} - must be a string starting with http:// or https://")
+        else:
+            raise ValueError(f"URLs must be a string or list of strings, got {type(urls)}")
+    else:
+        raise ValueError("Missing required parameter: urls")
+    
+    # Check content_type
+    if 'content_type' in params_copy and params_copy['content_type'] is not None:
+        if params_copy['content_type'] not in ["html", "markdown", "both"]:
+            raise ValueError(f"content_type must be one of 'html', 'markdown', or 'both', got {params_copy['content_type']}")
+    
+    # Check compression_type
+    if 'compression_type' in params_copy and params_copy['compression_type'] is not None:
+        if params_copy['compression_type'] not in ["gzip", "snappy", "lz4", "zstd"]:
+            raise ValueError(f"compression_type must be one of 'gzip', 'snappy', 'lz4', or 'zstd', got {params_copy['compression_type']}")
+    
+    # Check max_message_size
+    if 'max_message_size' in params_copy and params_copy['max_message_size'] is not None:
+        if not isinstance(params_copy['max_message_size'], int) or params_copy['max_message_size'] < 1024:
+            raise ValueError(f"max_message_size must be an integer >= 1024 bytes, got {params_copy['max_message_size']}")
+        if params_copy['max_message_size'] > 104857600:  # 100MB
+            raise ValueError(f"max_message_size must be <= 100MB (104857600 bytes), got {params_copy['max_message_size']}")
+    
+    # Check buffer_memory
+    if 'buffer_memory' in params_copy and params_copy['buffer_memory'] is not None:
+        if not isinstance(params_copy['buffer_memory'], int) or params_copy['buffer_memory'] < 1024:
+            raise ValueError(f"buffer_memory must be an integer >= 1024 bytes, got {params_copy['buffer_memory']}")
+        if params_copy['buffer_memory'] > 1073741824:  # 1GB
+            raise ValueError(f"buffer_memory must be <= 1GB (1073741824 bytes), got {params_copy['buffer_memory']}")
+    
+    return params_copy
+
+def validate_kafka_stream_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate Kafka streaming results against the schema"""
+    # Basic structure validation
+    if not isinstance(result, dict):
+        raise ValueError(f"Result must be a dictionary, got {type(result)}")
+    
+    # Check that all keys are strings (URLs)
+    for key, value in result.items():
+        if key == "session_id":
+            continue
+            
+        if not isinstance(value, dict):
+            raise ValueError(f"Result for URL {key} must be a dictionary, got {type(value)}")
+        
+        # Check for required fields
+        if "success" not in value:
+            raise ValueError(f"Result for URL {key} is missing required field 'success'")
+        
+        # If success is False, error should be present
+        if not value.get("success", False) and "error" not in value:
+            raise ValueError(f"Failed result for URL {key} is missing required field 'error'")
     
     return result 

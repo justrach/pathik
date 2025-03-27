@@ -23,7 +23,10 @@ def stream_urls_to_kafka(
     kafka_brokers: str = "localhost:9092", 
     kafka_topic: str = "pathik_crawl_data", 
     content_type: str = "both",
-    session_id: Optional[str] = None
+    session_id: Optional[str] = None,
+    compression_type: Optional[str] = None,
+    max_message_size: Optional[int] = None,
+    buffer_memory: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Stream a list of URLs to Kafka using pathik's native streaming functionality.
@@ -34,6 +37,9 @@ def stream_urls_to_kafka(
         kafka_topic: Kafka topic to stream to
         content_type: Type of content to stream ('html', 'markdown', or 'both')
         session_id: Optional session ID (generated if not provided)
+        compression_type: Compression algorithm to use ('gzip', 'snappy', 'lz4', 'zstd')
+        max_message_size: Maximum message size in bytes
+        buffer_memory: Kafka producer buffer memory in bytes
         
     Returns:
         Dictionary with streaming results
@@ -51,6 +57,12 @@ def stream_urls_to_kafka(
     print(f"Kafka Topic: {kafka_topic}")
     print(f"Content Type: {content_type}")
     print(f"Session ID: {session_id}")
+    if compression_type:
+        print(f"Compression: {compression_type}")
+    if max_message_size:
+        print(f"Max Message Size: {max_message_size} bytes")
+    if buffer_memory:
+        print(f"Buffer Memory: {buffer_memory} bytes")
     print("="*50)
     
     # Stream URLs to Kafka using pathik's built-in functionality
@@ -59,7 +71,10 @@ def stream_urls_to_kafka(
         content_type=content_type,
         topic=kafka_topic,
         session=session_id,
-        parallel=True
+        parallel=True,
+        compression_type=compression_type,
+        max_message_size=max_message_size,
+        buffer_memory=buffer_memory
     )
     
     # Return results 
@@ -90,6 +105,8 @@ def print_results(results: Dict[str, Any]) -> None:
             if "details" in result:
                 details = result["details"]
                 print(f"  Topic: {details.get('topic')}")
+                if "compression_type" in details:
+                    print(f"  Compression: {details.get('compression_type')}")
                 html_file = details.get('html_file', 'N/A')
                 md_file = details.get('markdown_file', 'N/A')
                 print(f"  HTML Content: {os.path.basename(html_file) if html_file != 'N/A' else 'N/A'}")
@@ -131,6 +148,10 @@ def main():
     parser.add_argument("--content", type=str, choices=["html", "markdown", "both"], default="both", 
                         help="Type of content to stream")
     parser.add_argument("--session", type=str, help="Session ID (generated if not provided)")
+    parser.add_argument("--compression", type=str, choices=["gzip", "snappy", "lz4", "zstd"],
+                        help="Compression algorithm to use")
+    parser.add_argument("--max-message-size", type=int, help="Maximum message size in bytes")
+    parser.add_argument("--buffer-memory", type=int, help="Buffer memory in bytes for Kafka producer")
     
     args = parser.parse_args()
     
@@ -143,7 +164,10 @@ def main():
         kafka_brokers=args.brokers,
         kafka_topic=args.topic,
         content_type=args.content,
-        session_id=args.session
+        session_id=args.session,
+        compression_type=args.compression,
+        max_message_size=args.max_message_size,
+        buffer_memory=args.buffer_memory
     )
     
     # Print results

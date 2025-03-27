@@ -15,12 +15,17 @@ from pathik.schema import (
     CrawlParams,
     CrawlResult,
     PathikFileResult,
+    KafkaStreamParams,
+    KafkaStreamResult,
     validate_crawl_params,
-    validate_crawl_result
+    validate_crawl_result,
+    validate_kafka_stream_params,
+    validate_kafka_stream_result
 )
 
 # Import the actual implementation
 from pathik.cli import crawl as _cli_crawl
+from pathik.crawler import stream_to_kafka as _stream_to_kafka
 
 def safe_crawl(
     urls: Union[str, List[str]], 
@@ -154,4 +159,94 @@ def safe_crawl(
         if session_id:
             error_result["session_id"] = session_id
             
+        return error_result
+
+def safe_stream_to_kafka(
+    params_or_urls: Union[KafkaStreamParams, Union[str, List[str]]],
+    content_type: Optional[str] = None,
+    topic: Optional[str] = None,
+    session_id: Optional[str] = None,
+    parallel: bool = True,
+    compression_type: Optional[str] = None,
+    max_message_size: Optional[int] = None,
+    buffer_memory: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Type-safe wrapper for streaming content to Kafka.
+    
+    Args:
+        params_or_urls: Either a KafkaStreamParams object or a URL/list of URLs
+        content_type: Type of content to stream ('html', 'markdown', or 'both')
+        topic: Kafka topic to stream to
+        session_id: Session ID for grouping messages
+        parallel: Process URLs in parallel
+        compression_type: Compression type ('gzip', 'snappy', 'lz4', 'zstd')
+        max_message_size: Maximum message size in bytes
+        buffer_memory: Buffer memory in bytes
+        
+    Returns:
+        Dictionary with streaming results
+        
+    Raises:
+        ValueError: If any input parameters fail validation
+    """
+    # Check if the input is a KafkaStreamParams object
+    if isinstance(params_or_urls, KafkaStreamParams):
+        # Extract parameters from the object
+        urls = params_or_urls.urls
+        content_type = params_or_urls.content_type
+        topic = params_or_urls.topic
+        session_id = params_or_urls.session_id
+        parallel = params_or_urls.parallel
+        compression_type = getattr(params_or_urls, 'compression_type', None)
+        max_message_size = getattr(params_or_urls, 'max_message_size', None)
+        buffer_memory = getattr(params_or_urls, 'buffer_memory', None)
+    else:
+        # Use the parameters directly
+        urls = params_or_urls
+    
+    # Build the parameters dictionary
+    params = {
+        "urls": urls,
+        "content_type": content_type,
+        "topic": topic,
+        "session": session_id,
+        "parallel": parallel
+    }
+    
+    # Add compression options if provided
+    if compression_type:
+        params["compression_type"] = compression_type
+    if max_message_size:
+        params["max_message_size"] = max_message_size
+    if buffer_memory:
+        params["buffer_memory"] = buffer_memory
+    
+    # Validate parameters
+    try:
+        validate_kafka_stream_params(params)
+    except ValueError as e:
+        raise ValueError(f"Parameter validation failed: {e}")
+    
+    # Call the actual implementation
+    try:
+        result = _stream_to_kafka(**params)
+        
+        # Add session_id to result if it's not already there
+        if session_id and "session_id" not in result:
+            result["session_id"] = session_id
+            
+        # Return the result
+        return result
+    except Exception as e:
+        # Create a structured error result
+        if isinstance(urls, list):
+            error_result = {url: {"success": False, "error": str(e)} for url in urls}
+        else:
+            error_result = {urls: {"success": False, "error": str(e)}}
+        
+        # Add session_id if available
+        if session_id:
+            error_result["session_id"] = session_id
+        
         return error_result 

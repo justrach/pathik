@@ -1,0 +1,13 @@
+Fix Kafka streaming compression options and update binary
+
+Fixed an issue with Kafka streaming compression options where the Go binary was rejecting the compression flags. Added compression, max-message-size, and buffer-memory flags to the Go binary and updated the Python wrapper to support these options.
+
+Changes include:
+- Added compression_type, max_message_size, and buffer_memory parameters to the KafkaConfig struct in Go
+- Added corresponding flags to the Go binary command line interface
+- Updated the Kafka writer creation code to use the compression options
+- Modified stream_to_kafka function in Python to support the new parameters
+- Updated both safe_kafka_demo.py and native_kafka_demo.py examples to use compression options
+- Updated documentation to reflect new compression and performance tuning options
+
+The fix allows users to specify Kafka compression algorithm, message size, and buffer memory for optimized streaming performance. 

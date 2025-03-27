@@ -102,6 +102,9 @@ func main() {
 	contentTypeFlag := flag.String("content", "both", "Content type to stream to Kafka: html, markdown, or both (default: both)")
 	topicFlag := flag.String("topic", "", "Kafka topic to stream to (overrides KAFKA_TOPIC environment variable)")
 	sessionFlag := flag.String("session", "", "Session ID to include with Kafka messages (for multi-user environments)")
+	compressionFlag := flag.String("compression", "", "Compression algorithm to use for Kafka messages (gzip, snappy, lz4, zstd)")
+	maxMessageSizeFlag := flag.Int("max-message-size", 0, "Maximum message size in bytes for Kafka")
+	bufferMemoryFlag := flag.Int("buffer-memory", 0, "Buffer memory in bytes for Kafka producer")
 	flag.Parse()
 
 	// Print version if requested
@@ -151,7 +154,7 @@ func main() {
 
 	// Kafka mode - crawl and stream to Kafka
 	if *useKafkaFlag {
-		streamToKafka(urls, *parallelFlag, *contentTypeFlag, *topicFlag, *sessionFlag)
+		streamToKafka(urls, *parallelFlag, *contentTypeFlag, *topicFlag, *sessionFlag, *compressionFlag, *maxMessageSizeFlag, *bufferMemoryFlag)
 		return
 	}
 
@@ -234,7 +237,7 @@ func main() {
 	}
 }
 
-func streamToKafka(urls []string, parallel bool, contentType string, topic string, session string) {
+func streamToKafka(urls []string, parallel bool, contentType string, topic string, session string, compression string, maxMessageSize int, bufferMemory int) {
 	// Create a Kafka writer
 	kafkaConfig, err := storage.LoadKafkaConfig()
 	if err != nil {
@@ -246,6 +249,24 @@ func streamToKafka(urls []string, parallel bool, contentType string, topic strin
 	if topic != "" {
 		kafkaConfig.Topic = topic
 		fmt.Printf("Using command-line specified Kafka topic: %s\n", topic)
+	}
+
+	// Add compression options if provided
+	if compression != "" {
+		kafkaConfig.CompressionType = compression
+		fmt.Printf("Using compression: %s\n", compression)
+	}
+
+	// Add message size if provided
+	if maxMessageSize > 0 {
+		kafkaConfig.MaxMessageSize = maxMessageSize
+		fmt.Printf("Using max message size: %d bytes\n", maxMessageSize)
+	}
+
+	// Add buffer memory if provided
+	if bufferMemory > 0 {
+		kafkaConfig.BufferMemory = bufferMemory
+		fmt.Printf("Using buffer memory: %d bytes\n", bufferMemory)
 	}
 
 	writer, err := storage.CreateKafkaWriter(kafkaConfig)
