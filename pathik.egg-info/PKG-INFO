@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: pathik
-Version: 0.2.2
+Version: 0.2.24
 Summary: A web crawler implemented in Go with Python bindings
 Home-page: https://github.com/justrach/pathik
 Author: Your Name
@@ -13,6 +13,10 @@ Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: requests>=2.25.0
 Requires-Dist: tqdm>=4.50.0
+Provides-Extra: kafka
+Requires-Dist: kafka-python>=2.0.0; extra == "kafka"
+Provides-Extra: all
+Requires-Dist: kafka-python>=2.0.0; extra == "all"
 Dynamic: author
 Dynamic: author-email
 Dynamic: classifier
@@ -20,6 +24,7 @@ Dynamic: description
 Dynamic: description-content-type
 Dynamic: home-page
 Dynamic: license-file
+Dynamic: provides-extra
 Dynamic: requires-dist
 Dynamic: requires-python
 Dynamic: summary
@@ -39,7 +44,9 @@ A high-performance web crawler implemented in Go with Python and JavaScript bind
 - Markdown conversion
 - Parallel URL processing
 - Cloudflare R2 integration
+- Kafka streaming support
 - Memory-efficient (uses ~10x less memory than browser automation tools)
+- Automatic binary version management
 
 ## Performance Benchmarks
 
@@ -83,9 +90,36 @@ pip install pathik
 
 The package will automatically download the correct binary for your platform from GitHub releases on first use.
 
+### Binary Version Management
+
+Pathik now automatically handles binary version checking and updates:
+
+- When you install or upgrade the Python package, it will check if the binary matches the package version
+- If the versions don't match, it will automatically download the correct binary
+- You can manually check and update the binary with:
+  ```python
+  # Force binary update
+  import pathik
+  from pathik.crawler import get_binary_path
+  binary_path = get_binary_path(force_download=True)
+  ```
+
+- Command line options:
+  ```bash
+  # Check if binary is up to date
+  pathik --check-binary
+  
+  # Force update of the binary
+  pathik --force-update-binary
+  ```
+
+This ensures you always have the correct binary version with all the latest features, especially when using new functionality like Kafka streaming with session IDs.
+
 ## Usage
 
 ### Python API
+
+#### Basic Crawling
 
 ```python
 import pathik
@@ -109,6 +143,64 @@ results = pathik.crawl(urls, parallel=False)
 results = pathik.crawl(urls, output_dir="./output")
 ```
 
+#### R2 Upload
+
+```python
+import pathik
+import uuid
+
+# Generate a UUID or use your own
+my_uuid = str(uuid.uuid4())
+
+# Crawl and upload to R2
+results = pathik.crawl_to_r2("https://example.com", uuid_str=my_uuid)
+print(f"UUID: {results['https://example.com']['uuid']}")
+print(f"R2 HTML key: {results['https://example.com']['r2_html_key']}")
+print(f"R2 Markdown key: {results['https://example.com']['r2_markdown_key']}")
+
+# Upload multiple URLs
+results = pathik.crawl_to_r2([
+    "https://example.com",
+    "https://httpbin.org/html"
+], uuid_str=my_uuid)
+```
+
+#### Kafka Streaming
+
+```python
+import pathik
+import uuid
+
+# Generate a session ID to track this batch of streams
+session_id = str(uuid.uuid4())
+
+# URLs to crawl and stream
+urls = [
+    "https://www.wikipedia.org",
+    "https://www.github.com",
+    "https://news.ycombinator.com"
+]
+
+# Stream content to Kafka
+results = pathik.stream_to_kafka(
+    urls=urls,                   # URLs to crawl and stream
+    content_type="both",         # Stream both HTML and Markdown
+    session=session_id,          # Add session ID to messages
+    topic="pathik.crawl",        # Set Kafka topic
+    parallel=True                # Process URLs in parallel
+)
+
+# Print results
+for url, result in results.items():
+    if result["success"]:
+        print(f"✅ Successfully streamed {url}")
+    else:
+        print(f"❌ Failed to stream {url}: {result.get('error', 'Unknown error')}")
+
+# You can use this session ID to filter messages when consuming from Kafka
+print(f"Session ID for filtering: {session_id}")
+```
+
 ### Command Line
 
 ```bash
@@ -129,11 +221,62 @@ pathik r2 https://example.com
 
 # Stream crawled content to Kafka
 pathik kafka https://example.com
+
+# Stream only HTML content to Kafka
+pathik kafka -c html https://example.com
+
+# Stream only Markdown content to Kafka
+pathik kafka -c markdown https://example.com
+
+# Stream to a specific Kafka topic
+pathik kafka -t user1_crawl_data https://example.com
+
+# Add a session ID for multi-user environments
+pathik kafka --session user123 https://example.com
+
+# Combine options
+pathik kafka -c html -t user1_data --session user123 https://example.com
 ```
 
 ## Kafka Streaming
 
 Pathik supports streaming crawled content directly to Kafka. This is useful for real-time processing pipelines.
+
+### Basic Usage
+
+```python
+import pathik
+import uuid
+
+# Generate a session ID to track this batch of streams
+session_id = str(uuid.uuid4())
+
+# URLs to crawl and stream
+urls = [
+    "https://www.wikipedia.org",
+    "https://www.github.com",
+    "https://news.ycombinator.com"
+]
+
+# Stream content to Kafka
+results = pathik.stream_to_kafka(
+    urls=urls,                   # URLs to crawl and stream
+    content_type="both",         # Stream both HTML and Markdown
+    session=session_id,          # Add session ID to messages
+    topic="pathik.crawl",        # Set Kafka topic
+    parallel=True                # Process URLs in parallel
+)
+
+# Print results
+for url, result in results.items():
+    if result["success"]:
+        print(f"✅ Successfully streamed {url}")
+    else:
+        print(f"❌ Failed to stream {url}: {result.get('error', 'Unknown error')}")
+
+# You can use this session ID to filter messages when consuming from Kafka
+print(f"Session ID for filtering: {session_id}")
+```
 
 ### Kafka Configuration
 
@@ -148,6 +291,24 @@ KAFKA_CLIENT_ID=pathik-crawler      # Client ID for Kafka
 KAFKA_USE_TLS=false                 # Whether to use TLS
 ```
 
+Alternatively, you can configure these settings in your code with the CLI-based approach:
+
+```python
+from pathik.cli import crawl
+
+results = crawl(
+    urls=["https://example.com"],
+    kafka=True,
+    kafka_brokers="localhost:9092",
+    kafka_topic="my.topic",
+    kafka_username="user",
+    kafka_password="pass",
+    kafka_client_id="pathik-client",
+    kafka_use_tls=True,
+    session_id="my-session-id"
+)
+```
+
 ### Kafka Message Format
 
 When streaming to Kafka, Pathik sends two messages per URL:
@@ -159,6 +320,7 @@ When streaming to Kafka, Pathik sends two messages per URL:
      - url: The original URL
      - contentType: "text/html"
      - timestamp: ISO 8601 timestamp
+     - session: Session ID (if provided)
 
 2. Markdown Content:
    - Key: URL
@@ -167,51 +329,52 @@ When streaming to Kafka, Pathik sends two messages per URL:
      - url: The original URL
      - contentType: "text/markdown"
      - timestamp: ISO 8601 timestamp
+     - session: Session ID (if provided)
 
-### Usage with Kafka Consumers
+### Kafka Consumer Examples
 
-Here's a minimal example of consuming Pathik messages with a Kafka consumer:
+Pathik includes example consumers for Go, Python, and JavaScript in the `examples` directory.
 
-```go
-package main
+#### Python Consumer Example
 
-import (
-    "context"
-    "fmt"
-    "github.com/segmentio/kafka-go"
+```python
+from kafka import KafkaConsumer
+import json
+
+# Connect to Kafka
+consumer = KafkaConsumer(
+    'pathik_crawl_data',                  # Topic
+    bootstrap_servers=['localhost:9092'],
+    auto_offset_reset='earliest',         # Start from beginning
+    enable_auto_commit=True,
+    group_id='pathik-consumer-group'
 )
 
-func main() {
-    reader := kafka.NewReader(kafka.ReaderConfig{
-        Brokers:   []string{"localhost:9092"},
-        Topic:     "pathik_crawl_data",
-        Partition: 0,
-        MinBytes:  10e3, // 10KB
-        MaxBytes:  10e6, // 10MB
-    })
-    defer reader.Close()
+# Optional: filter by session ID
+session_filter = "user123"  # Set to None to receive all messages
 
-    for {
-        m, err := reader.ReadMessage(context.Background())
-        if err != nil {
-            break
-        }
+# Process messages
+for message in consumer:
+    # Extract headers
+    headers = {k: v.decode('utf-8') for k, v in message.headers}
+    
+    # Filter by session if needed
+    if session_filter and headers.get('session') != session_filter:
+        continue
         
-        url := string(m.Key)
-        contentType := ""
-        
-        // Extract content type from headers
-        for _, header := range m.Headers {
-            if header.Key == "contentType" {
-                contentType = string(header.Value)
-                break
-            }
-        }
-        
-        fmt.Printf("Received from %s: %s content (%d bytes)\n", 
-            url, contentType, len(m.Value))
-    }
-}
+    # Get message details
+    url = message.key.decode('utf-8')
+    content_type = headers.get('contentType')
+    
+    print(f"Received from {url}: {content_type} content ({len(message.value)} bytes)")
+    
+    # Process content based on type
+    if content_type == 'text/html':
+        # Process HTML...
+        pass
+    elif content_type == 'text/markdown':
+        # Process Markdown...
+        pass
 ```
 
 ## Using in Docker
@@ -263,37 +426,3 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install in development mode
 pip install -e .
 ```
-
-### Building Binaries Locally
-
-```bash
-# Build for current platform
-python build_binary.py
-
-# Build for all platforms
-python build_binary.py --all
-
-# Build for specific platform
-python build_binary.py --os linux --arch amd64
-```
-
-### Release Process
-
-Pathik uses GitHub Actions to automate the release process:
-
-1. Create and push a new tag:
-   ```bash
-   git tag -a v0.2.2 -m "Release v0.2.2"
-   git push origin v0.2.2
-   ```
-
-2. GitHub Actions will:
-   - Build binaries for all supported platforms
-   - Create a GitHub Release with the binaries
-   - Build and publish the Python package to PyPI
-
-The PyPI package will download the appropriate binary from GitHub releases when needed.
-
-## License
-
-Apache 2.0 

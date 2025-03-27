@@ -182,6 +182,9 @@ setup(
         "requests>=2.25.0",  # For downloading binaries
         "tqdm>=4.50.0",      # For download progress bar
     ],
+    extras_require={
+        "kafka": ["kafka-python>=2.0.0"],
+    },
     python_requires='>=3.6',
     classifiers=[
         "Programming Language :: Python :: 3",

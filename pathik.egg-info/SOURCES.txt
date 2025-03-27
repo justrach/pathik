@@ -9,7 +9,6 @@ setup.py
 pathik/__init__.py
 pathik/cli.py
 pathik/crawler.py
-pathik/pathik_bin
 pathik/simple.py
 pathik.egg-info/PKG-INFO
 pathik.egg-info/SOURCES.txt
