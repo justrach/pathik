@@ -22,13 +22,13 @@ urls = [
 ]
 
 # Generate a session ID for this run
-session_id = str(uuid.uuid4())
+session_id = '177ff87f-bfc8-46c3-83b4-30b1d0064961'
 print(f"Session ID: {session_id}")
 
 # Stream content to Kafka
 results = pathik.stream_to_kafka(
     urls=urls,
-    content_type="both",
+    content_type="html",
     session=session_id,
     topic="pathik.crawl",
     parallel=True

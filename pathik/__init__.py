@@ -12,7 +12,7 @@ import tempfile
 import subprocess
 
 # Set version
-__version__ = "0.2.13"
+__version__ = "0.2.25"
 
 # Import the basic functions  
 from .cli import crawl
